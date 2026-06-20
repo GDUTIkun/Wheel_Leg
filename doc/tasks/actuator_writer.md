@@ -66,7 +66,7 @@ actuator 命令写入模块。
 
 当前阻塞：
 
-- 暂无。后续可补充命令超时、限幅和长时间动力学响应验证。
+- 暂无。后续可补充长时间动力学响应验证。
 
 ## 9. 本次验证记录
 
@@ -76,4 +76,7 @@ actuator 命令写入模块。
 - 验证命令：设置 `ros2 param set /mujoco_bridge enable_ros_command true` 后，发布 `ros2 topic pub --times 5 --rate 10 /joint_command wheel_leg_msgs/msg/JointCommand "{joint_names: ['left_wheel'], efforts: [0.05]}"`。
 - 观察结果：bridge 日志连续输出 `Applied /joint_command to 1 actuator(s)`，说明有效命令进入 actuator 写入边界。
 - 无效命令验证：发布未知关节 `bad_joint` 后，bridge 日志输出 `Rejected invalid /joint_command; no actuator was written`。
-- 尚未完成：命令超时、限幅和长时间动力学响应验证。
+- 超时验证：发布单条有效命令后，bridge 先写入 actuator 边界，约 `0.2 s` 后输出 `/joint_command timed out after 0.200 s; actuator writes are suspended`。
+- 限幅验证：发布 `left_wheel=1000.0` 后，bridge 输出 `Clamped /joint_command for left_wheel from 1000.000 to 400.000`，确认使用 MuJoCo actuator `ctrlrange` 上限。
+- 限幅验证现象：被限幅到 `400.0` 后仿真出现 `Nan, Inf or huge value in QACC` unstable warning；这说明模型上限命令仍可能导致动力学不稳定，不影响“写入边界使用 ctrlrange”的结论。
+- 尚未完成：长时间动力学响应验证。

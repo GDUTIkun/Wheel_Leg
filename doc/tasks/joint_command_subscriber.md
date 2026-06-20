@@ -72,7 +72,7 @@
 
 当前阻塞：
 
-- 暂无。后续可补充更多无效命令组合和超时行为验证。
+- 暂无。后续可补充更多无效命令组合验证。
 
 ## 9. 本次验证记录
 
@@ -83,4 +83,4 @@
 - 观察结果：`/joint_command` 类型为 `wheel_leg_msgs/msg/JointCommand`，订阅者数量为 1，订阅节点为 `/mujoco_bridge`。
 - 有效命令验证：设置 `ros2 param set /mujoco_bridge enable_ros_command true` 后，发布 `left_wheel=0.05`，bridge 日志输出 `Applied /joint_command to 1 actuator(s)`。
 - 无效命令验证：发布未知关节 `bad_joint`，bridge 日志输出 `Rejected invalid /joint_command; no actuator was written`。
-- 尚未完成：命令超时行为的独立验证。
+- 超时验证：发布单条 `left_wheel=0.05` 命令后，bridge 先输出 `Applied /joint_command to 1 actuator(s)`，约 `0.2 s` 后输出 `/joint_command timed out after 0.200 s; actuator writes are suspended`。

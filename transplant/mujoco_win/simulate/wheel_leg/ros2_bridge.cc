@@ -128,6 +128,12 @@ class Ros2Bridge {
       return;
     }
     if (d->time - latest_command_sim_time_ > kCommandTimeoutSec) {
+      if (!command_timeout_logged_) {
+        RCLCPP_WARN(node_->get_logger(),
+                    "/joint_command timed out after %.3f s; actuator writes are suspended",
+                    kCommandTimeoutSec);
+        command_timeout_logged_ = true;
+      }
       return;
     }
     if (!ValidateCommand(m)) {
@@ -139,6 +145,10 @@ class Ros2Bridge {
       return;
     }
 
+    bool command_was_clamped = false;
+    std::string clamped_joint_name;
+    double first_requested_effort = 0.0;
+    double first_clamped_effort = 0.0;
     for (std::size_t i = 0; i < latest_command_->joint_names.size(); ++i) {
       const std::string& joint_name = latest_command_->joint_names[i];
       const int actuator_id = actuator_ids_by_ros_name_[joint_name];
@@ -146,9 +156,26 @@ class Ros2Bridge {
       if (m->actuator_ctrllimited[actuator_id]) {
         const double min_ctrl = m->actuator_ctrlrange[2 * actuator_id];
         const double max_ctrl = m->actuator_ctrlrange[2 * actuator_id + 1];
+        const double requested_effort = effort;
         effort = std::clamp(effort, min_ctrl, max_ctrl);
+        if (effort != requested_effort) {
+          if (!command_was_clamped) {
+            clamped_joint_name = joint_name;
+            first_requested_effort = requested_effort;
+            first_clamped_effort = effort;
+          }
+          command_was_clamped = true;
+        }
       }
       d->ctrl[actuator_id] = effort;
+    }
+    if (command_was_clamped &&
+        latest_command_ != last_clamped_command_logged_) {
+      RCLCPP_WARN(node_->get_logger(),
+                  "Clamped /joint_command for %s from %.3f to %.3f",
+                  clamped_joint_name.c_str(), first_requested_effort,
+                  first_clamped_effort);
+      last_clamped_command_logged_ = latest_command_;
     }
     if (latest_command_ != last_applied_command_logged_) {
       RCLCPP_INFO(node_->get_logger(),
@@ -156,6 +183,7 @@ class Ros2Bridge {
                   latest_command_->joint_names.size());
       last_applied_command_logged_ = latest_command_;
     }
+    command_timeout_logged_ = false;
   }
 
  private:
@@ -244,6 +272,7 @@ class Ros2Bridge {
   bool enable_ros_command_ = false;
   bool pending_command_update_ = false;
   bool has_command_ = false;
+  bool command_timeout_logged_ = false;
   double latest_command_sim_time_ = 0.0;
   double next_publish_time_ = -1.0;
 
@@ -254,6 +283,7 @@ class Ros2Bridge {
       command_sub_;
   wheel_leg_msgs::msg::JointCommand::SharedPtr latest_command_;
   wheel_leg_msgs::msg::JointCommand::SharedPtr last_applied_command_logged_;
+  wheel_leg_msgs::msg::JointCommand::SharedPtr last_clamped_command_logged_;
   wheel_leg_msgs::msg::JointCommand::SharedPtr last_invalid_command_logged_;
   std::unordered_map<std::string, int> joint_ids_by_ros_name_;
   std::unordered_map<std::string, int> actuator_ids_by_ros_name_;

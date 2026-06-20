@@ -73,7 +73,7 @@ IMU 状态发布模块。
 
 当前待确认：
 
-- 暂无。后续仍需通过姿态动作或可视化验证坐标系语义是否与状态估计期望一致。
+- 暂无。当前 IMU 坐标语义已按模型挂载关系和运行时消息表现完成验证。
 
 ## 9. 本次验证记录
 
@@ -85,3 +85,4 @@ IMU 状态发布模块。
 - 观察结果：消息包含 `orientation`、`angular_velocity`、`linear_acceleration`，`header.frame_id` 为 `base_link`，covariance 为全 0。
 - 频率验证：修正仿真时间发布调度后，`ros2 topic hz /imu` 统计约 `100 Hz`。
 - 修正说明：`/imu` 与 `/joint_states` 共用 bridge 发布调度；初始并行频率统计约 `83.3 Hz`，改为 `next_publish_time` 调度后恢复为约 `100 Hz`。
+- 坐标语义验证：`base_frame` site 直接挂在 `base_body` 上且无额外旋转；`base_accel`、`base_gyro`、`base_quat` 都直接以该 site 为参考。bridge 只做四元数 `w,x,y,z -> x,y,z,w` 重排，不做轴重映射。运行时 `/imu` 样本中 `orientation` 接近单位四元数、`linear_acceleration.z` 接近 `+9.8`，与近直立机体系观测一致。
