@@ -222,16 +222,12 @@ std::array<double, 3> ReadVectorSensor(const mjModel* m, const mjData* d,
   return values;
 }
 
-RobotSensorData AssembleSensorData(const mjModel* m, const mjData* d) {
-  static bool has_previous_left_phi = false;
-  static bool has_previous_right_phi = false;
-  static double previous_left_phi = 0.0;
-  static double previous_right_phi = 0.0;
-  static double filtered_left_phi_rate = 0.0;
-  static double filtered_right_phi_rate = 0.0;
-  static double base_forward_distance = 0.0;
-
+RobotSensorData AssembleSensorData(
+    const mjModel* m, const mjData* d, SensorAssemblyState* state) {
   RobotSensorData sensor_data = {};
+  if (!m || !d || !state) {
+    return sensor_data;
+  }
 
   const std::array<double, 4> base_quat = ReadQuaternionSensor(m, d, "base_quat");
   const std::array<double, 3> base_gyro = ReadVectorSensor(m, d, "base_gyro");
@@ -242,10 +238,10 @@ RobotSensorData AssembleSensorData(const mjModel* m, const mjData* d) {
   const double base_forward_velocity =
       m->nv > 1 ? ComputeBaseForwardVelocity(d, base_euler.yaw) : 0.0;
   if (dt > 0.0) {
-    base_forward_distance += base_forward_velocity * dt;
+    state->base_forward_distance += base_forward_velocity * dt;
   }
 
-  sensor_data.base_link.distance = base_forward_distance;
+  sensor_data.base_link.distance = state->base_forward_distance;
   sensor_data.base_link.velocity = base_forward_velocity;
   sensor_data.base_link.roll = base_euler.roll;
   sensor_data.base_link.pitch = base_euler.pitch;
@@ -259,11 +255,18 @@ RobotSensorData AssembleSensorData(const mjModel* m, const mjData* d) {
 
   sensor_data.left_leg = AssembleLeftLegState(m, d);
   sensor_data.right_leg = AssembleRightLegState(m, d);
-  UpdatePhiRate(&sensor_data.left_leg.kinematics, &previous_left_phi,
-                &filtered_left_phi_rate, &has_previous_left_phi, dt);
-  UpdatePhiRate(&sensor_data.right_leg.kinematics, &previous_right_phi,
-                &filtered_right_phi_rate, &has_previous_right_phi, dt);
+  UpdatePhiRate(&sensor_data.left_leg.kinematics, &state->previous_left_phi,
+                &state->filtered_left_phi_rate, &state->has_previous_left_phi,
+                dt);
+  UpdatePhiRate(&sensor_data.right_leg.kinematics, &state->previous_right_phi,
+                &state->filtered_right_phi_rate, &state->has_previous_right_phi,
+                dt);
   return sensor_data;
+}
+
+RobotSensorData AssembleSensorData(const mjModel* m, const mjData* d) {
+  static SensorAssemblyState state;
+  return AssembleSensorData(m, d, &state);
 }
 
 void PrintSensors(const RobotSensorData& sensor_data) {

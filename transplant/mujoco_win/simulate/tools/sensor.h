@@ -52,6 +52,19 @@ struct RobotSensorData {
   LegState right_leg;
 };
 
+struct SensorAssemblyState {
+  bool has_previous_left_phi = false;
+  bool has_previous_right_phi = false;
+  double previous_left_phi = 0.0;
+  double previous_right_phi = 0.0;
+  double filtered_left_phi_rate = 0.0;
+  double filtered_right_phi_rate = 0.0;
+  double base_forward_distance = 0.0;
+};
+
+RobotSensorData AssembleSensorData(
+    const mjModel* m, const mjData* d, SensorAssemblyState* state);
+
 RobotSensorData AssembleSensorData(const mjModel* m, const mjData* d);
 
 void PrintSensors(const RobotSensorData& sensor_data);

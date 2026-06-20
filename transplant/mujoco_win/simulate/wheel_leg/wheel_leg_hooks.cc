@@ -1,11 +1,12 @@
 #include "wheel_leg_hooks.h"
 #include "simulate.h"
+#include "controller_orchestration.h"
 #include "sensor.h"
+#include "sim_adapter.h"
 #include "plotter.h"
 #include "vmc.h"
 #include "math_utils.h"
 #include "pid.h"
-#include "actuator.h"
 #include "lqr_k.h"
 #include "ros2_bridge.h"
 
@@ -17,10 +18,6 @@ namespace wheel_leg {
 namespace {
 
 constexpr double kDefaultTargetPhiDeg = 90.0;
-constexpr double kDefaultTargetLegLength = 0.25;
-constexpr double kSwervingSpeedFeedforwardCoef = 3;
-constexpr double kLegLengthGravityCompMass = 3.99077;
-constexpr double kGravityAcceleration = 9.81;
 
 mujoco::Simulate* g_sim = nullptr;
 
@@ -31,14 +28,6 @@ PIDInstance phi_pid_r;
 PIDInstance steer_v_pid;
 PIDInstance anti_crash_pid;
 bool pid_initialized = false;
-
-struct ControlTargets {
-  double target_velocity = 0.0;
-  double target_yaw_rate = 0.0;
-  double target_distance = 0.0;
-  double target_leg_length = kDefaultTargetLegLength;
-  double target_phi = DegreesToRadians(kDefaultTargetPhiDeg);
-};
 
 ControlTargets control_targets;
 
@@ -86,29 +75,6 @@ PID_Init_Config_s anti_crash_pid_conf = {
     .Derivative_LPF_RC = 0.01,
 };
 
-LqrVector BuildLqrStates(const LegState& leg,
-                         const RobotSensorData& sensor_data) {
-  return {{
-      leg.kinematics.phi,
-      leg.kinematics.phi_rate,
-      sensor_data.base_link.distance,
-      sensor_data.base_link.velocity,
-      sensor_data.base_link.pitch,
-      sensor_data.base_link.pitch_rate,
-  }};
-}
-
-LqrVector BuildLqrTarget(const ControlTargets& targets) {
-  return {{
-      targets.target_phi,
-      0.0,
-      targets.target_distance,
-      targets.target_velocity,
-      0.0,
-      0.0,
-  }};
-}
-
 void PrintLqrVector(const char* name, const LqrVector& values) {
   std::cout << name
             << " phi=" << RadiansToDegrees(values[0]) << "deg"
@@ -150,8 +116,11 @@ void OnModelLoaded(mjModel* m, mjData* d) {
   PIDInit(&leglen_pid_r, &leg_length_pid_conf);
   PIDInit(&steer_v_pid, &steer_v_pid_conf);
   PIDInit(&anti_crash_pid, &anti_crash_pid_conf);
+  ResetSimAdapterState();
   pid_initialized = true;
   control_targets = ControlTargets();
+  control_targets.target_leg_length = 0.25;
+  control_targets.target_phi = DegreesToRadians(kDefaultTargetPhiDeg);
   ResetPlots();
 
   std::cout << "Open the right-side Control panel in simulate UI and drag the"
@@ -169,65 +138,26 @@ void BeforeStep(mjModel* m, mjData* d) {
   if (!pid_initialized) {
     return;
   }
-  const RobotSensorData sensor_data = AssembleSensorData(m, d);
+  const RobotSensorData sensor_data = SampleRobotSensorData(m, d);
   const LegKinematics& right_leg = sensor_data.right_leg.kinematics;
   const LegKinematics& left_leg = sensor_data.left_leg.kinematics;
   const double target_phi = control_targets.target_phi;
   const double target_leg_length = control_targets.target_leg_length;
 
-  float u_phi_r = PIDCalculate(&phi_pid_r, right_leg.phi, target_phi);
-  float u_leg_length_r = PIDCalculate(&leglen_pid_r, right_leg.leg_length,
-                                     target_leg_length);
-  float u_phi_l = PIDCalculate(&phi_pid_l, left_leg.phi, target_phi);
-  float u_leg_length_l = PIDCalculate(&leglen_pid_l, left_leg.leg_length,
-                                     target_leg_length); 
-  const double leg_length_gravity_compensation =
-      kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
-      std::cos(sensor_data.base_link.pitch);
-  const double right_leg_length_force =
-      u_leg_length_r + leg_length_gravity_compensation;
-  const double left_leg_length_force =
-      u_leg_length_l + leg_length_gravity_compensation;
-
-  const LqrVector lqr_target = BuildLqrTarget(control_targets);
-  const LqrVector lqr_states_l = BuildLqrStates(sensor_data.left_leg,
-                                                sensor_data);
-  const LqrVector lqr_states_r = BuildLqrStates(sensor_data.right_leg,
-                                                sensor_data);
-  LqrTorqueOutput LQR_L =
-      CalcLqrTorque(left_leg.leg_length, lqr_target, lqr_states_l);
-  LqrTorqueOutput LQR_R =
-      CalcLqrTorque(right_leg.leg_length, lqr_target, lqr_states_r);
-
-  const float steer_output = PIDCalculate(
-      &steer_v_pid, static_cast<float>(sensor_data.base_link.yaw_rate),
-      static_cast<float>(control_targets.target_yaw_rate));
-  const double swerving_speed_ff =
-      kSwervingSpeedFeedforwardCoef * steer_output;
-  const float anti_crash_output = PIDCalculate(
-      &anti_crash_pid, static_cast<float>(left_leg.phi - right_leg.phi), 0.0f);
-  const double anti_crash_hip_torque =
-      -anti_crash_output + swerving_speed_ff;
-  const double left_lqr_hip_torque =
-      LQR_L.hip_torque + anti_crash_hip_torque;
-  const double right_lqr_hip_torque =
-      LQR_R.hip_torque - anti_crash_hip_torque;
-
-  VmcOutput T_r =  SerialVMC(-right_leg_length_force, -right_lqr_hip_torque, right_leg.leg_length,
-                           right_leg.phi, right_leg.hip_absolute,
-                           right_leg.calf_absolute);
-  VmcOutput T_l =  SerialVMC(-left_leg_length_force, -left_lqr_hip_torque, left_leg.leg_length,
-                           left_leg.phi, left_leg.hip_absolute,
-                           left_leg.calf_absolute);
-  
-  Set_Val(m, d, "right_hip_motor", T_r.joint1_torque);
-  Set_Val(m, d, "right_knee_motor", T_r.joint2_torque);
-  Set_Val(m, d, "left_hip_motor", T_l.joint1_torque);
-  Set_Val(m, d, "left_knee_motor", T_l.joint2_torque);
-  const double right_wheel_torque = LQR_R.wheel_torque + steer_output;;
-  const double left_wheel_torque = LQR_L.wheel_torque - steer_output;
-  Set_Val(m, d, "right_wheel_motor", right_wheel_torque);
-  Set_Val(m, d, "left_wheel_motor", left_wheel_torque);
+  PIDCalculate(&phi_pid_r, right_leg.phi, target_phi);
+  PIDCalculate(&phi_pid_l, left_leg.phi, target_phi);
+  const ControlPidSet pid_set = {
+      .leglen_pid_l = &leglen_pid_l,
+      .leglen_pid_r = &leglen_pid_r,
+      .steer_v_pid = &steer_v_pid,
+      .anti_crash_pid = &anti_crash_pid,
+  };
+  const ControlStepOutputs control_outputs = RunStandControlStep(
+      d->time,
+      control_targets,
+      sensor_data,
+      pid_set);
+  ApplyControlCommand(m, d, control_outputs.command);
   ApplyRos2Command(m, d);
 
   // PlotLines("phi", "Phi Tracking", "%.1f deg",
@@ -258,11 +188,13 @@ void BeforeStep(mjModel* m, mjData* d) {
   if (step_count % 120 == 0) {
     // std::cout << std::fixed << std::setprecision(6);
     // std::cout << "[state] t=" << d->time << "s" << std::endl;
-    // PrintLqrVector("  target", lqr_target);
+    // PrintLqrVector("  target", BuildLqrTarget(control_targets));
     // std::cout << std::endl;
-    // PrintLqrVector("  left  ", lqr_states_l);
+    // PrintLqrVector("  left  ",
+    //                BuildLqrStates(sensor_data.left_leg, sensor_data));
     // std::cout << std::endl;
-    // PrintLqrVector("  right ", lqr_states_r);
+    // PrintLqrVector("  right ",
+    //                BuildLqrStates(sensor_data.right_leg, sensor_data));
     // std::cout << std::endl;
     // std::cout << "  leg_length left=" << left_leg.leg_length
     //           << "m, right=" << right_leg.leg_length << "m" << std::endl;
@@ -272,42 +204,43 @@ void BeforeStep(mjModel* m, mjData* d) {
     // std::cout << std::endl;
     // PrintMatlabVector("right_state", lqr_states_r);
     // std::cout << std::endl;
-    // std::cout << "  LQR_L wheel_torque=" << LQR_L.wheel_torque
-    //           << "Nm, hip_torque=" << LQR_L.hip_torque
-    //           << "Nm, torque_magnitude=" << LQR_L.torque_magnitude
-    //           << ", fly_flag=" << LQR_L.fly_flag << std::endl;
-    // std::cout << "  LQR_R wheel_torque=" << LQR_R.wheel_torque
-    //           << "Nm, hip_torque=" << LQR_R.hip_torque
-    //           << "Nm, torque_magnitude=" << LQR_R.torque_magnitude
-    //           << ", fly_flag=" << LQR_R.fly_flag << std::endl;
-    // std::cout << "  applied_wheel_torque left=" << left_wheel_torque
-    //           << "Nm, right=" << right_wheel_torque << "Nm" << std::endl;
+    // std::cout << "  applied_wheel_torque left="
+    //           << control_outputs.left_wheel_torque
+    //           << "Nm, right=" << control_outputs.right_wheel_torque
+    //           << "Nm" << std::endl;
     // std::cout << "  steer target_wz="
     //           << RadiansToDegrees(control_targets.target_yaw_rate)
     //           << "deg/s, wz="
     //           << RadiansToDegrees(sensor_data.base_link.yaw_rate)
-    //           << "deg/s, output=" << steer_output << "Nm" << std::endl;
+    //           << "deg/s, output=" << control_outputs.steer_output
+    //           << "Nm" << std::endl;
     // std::cout << "  anti_crash phi_diff="
     //           << RadiansToDegrees(left_leg.phi - right_leg.phi)
-    //           << "deg, output=" << anti_crash_output
-    //           << "Nm, swerving_ff=" << swerving_speed_ff
-    //           << "Nm, applied_hip_torque left=" << left_lqr_hip_torque
-    //           << "Nm, right=" << right_lqr_hip_torque << "Nm" << std::endl;
+    //           << "deg, output=" << control_outputs.anti_crash_output
+    //           << "Nm, swerving_ff=" << control_outputs.swerving_speed_ff
+    //           << "Nm, applied_hip_torque left="
+    //           << control_outputs.left_lqr_hip_torque
+    //           << "Nm, right=" << control_outputs.right_lqr_hip_torque
+    //           << "Nm" << std::endl;
     // std::cout << "  yaw_rate="
     //           << RadiansToDegrees(sensor_data.base_link.yaw_rate)
-    //           << "deg/s, steer_output=" << steer_output << "Nm"
+    //           << "deg/s, steer_output=" << control_outputs.steer_output
+    //           << "Nm"
     //           << std::endl;
     // std::cout << "  phi_diff=" << RadiansToDegrees(left_leg.phi - right_leg.phi)
-    //           << "deg, anti_crash_output=" << anti_crash_output << "Nm"
-    //           << "deg, swerving_ff=" << swerving_speed_ff << "Nm" << std::endl
+    //           << "deg, anti_crash_output="
+    //           << control_outputs.anti_crash_output << "Nm"
+    //           << "deg, swerving_ff=" << control_outputs.swerving_speed_ff
+    //           << "Nm" << std::endl
     //           << std::endl;
     // std::cout << "yaw=" << RadiansToDegrees(sensor_data.base_link.yaw)
     //           << std::endl;
     // std::cout << "  leg_length_gravity_comp="
     //           << leg_length_gravity_compensation
-    //           << "N, leg_length_force left=" << left_leg_length_force
-    //           << "N, right=" << right_leg_length_force << "N"
-    //           << std::endl;
+    //           << "N, leg_length_force left="
+    //           << control_outputs.left_leg_length_force
+    //           << "N, right=" << control_outputs.right_leg_length_force
+    //           << "N" << std::endl;
 
   }
   ++step_count;

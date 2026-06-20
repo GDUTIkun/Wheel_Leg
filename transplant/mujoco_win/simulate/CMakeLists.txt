@@ -22,6 +22,7 @@ find_package(Threads REQUIRED)
 if(WHEEL_LEG_ENABLE_ROS2)
   find_package(rclcpp REQUIRED)
   find_package(sensor_msgs REQUIRED)
+  find_package(wheel_leg_bridge REQUIRED)
   find_package(wheel_leg_msgs REQUIRED)
 endif()
 
@@ -238,6 +239,8 @@ add_executable(wheel_leg_simulate
   mujoco_ui/glfw_dispatch.cc
   mujoco_ui/platform_ui_adapter.cc
   mujoco_ui/simulate.cc
+  wheel_leg/controller_orchestration.cc
+  wheel_leg/sim_adapter.cc
   wheel_leg/ros2_bridge.cc
   wheel_leg/wheel_leg_hooks.cc
   tools/sensor.cc
@@ -251,6 +254,9 @@ add_executable(wheel_leg_simulate
 )
 
 target_include_directories(wheel_leg_simulate PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_common/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_bridge/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_sim/include
   ${CMAKE_CURRENT_SOURCE_DIR}/app
   ${CMAKE_CURRENT_SOURCE_DIR}/mujoco_ui
   ${CMAKE_CURRENT_SOURCE_DIR}/wheel_leg
@@ -268,6 +274,7 @@ if(WHEEL_LEG_ENABLE_ROS2)
   ament_target_dependencies(wheel_leg_simulate
     rclcpp
     sensor_msgs
+    wheel_leg_bridge
     wheel_leg_msgs
   )
 endif()

@@ -1,21 +1,18 @@
 #include "ros2_bridge.h"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
-#include <vector>
 
-#include "sensor.h"
+#include "sim_adapter.h"
 
 #ifdef WHEEL_LEG_ENABLE_ROS2
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <wheel_leg_bridge/message_conversions.hpp>
 #include <wheel_leg_msgs/msg/joint_command.hpp>
 #endif
 
@@ -25,31 +22,15 @@ namespace {
 constexpr double kStatePublishPeriodSec = 0.01;
 constexpr double kCommandTimeoutSec = 0.2;
 constexpr const char* kNodeName = "mujoco_bridge";
-constexpr const char* kBaseFrameId = "base_link";
-
-struct JointMapping {
-  const char* ros_name;
-  const char* mujoco_joint;
-  const char* mujoco_actuator;
-};
-
-constexpr std::array<JointMapping, 6> kJointMappings = {{
-    {"left_hip", "left_hip_joint", "left_hip_motor"},
-    {"left_knee", "left_knee_joint", "left_knee_motor"},
-    {"left_wheel", "left_wheel_joint", "left_wheel_motor"},
-    {"right_hip", "right_hip_joint", "right_hip_motor"},
-    {"right_knee", "right_knee_joint", "right_knee_motor"},
-    {"right_wheel", "right_wheel_joint", "right_wheel_motor"},
-}};
 
 #ifdef WHEEL_LEG_ENABLE_ROS2
 
-builtin_interfaces::msg::Time ToRosTime(double sim_time) {
-  builtin_interfaces::msg::Time stamp;
+wheel_leg_common::TimePoint ToCommonTime(double sim_time) {
+  wheel_leg_common::TimePoint stamp;
   const double clamped_time = std::max(0.0, sim_time);
   stamp.sec = static_cast<int32_t>(std::floor(clamped_time));
-  stamp.nanosec =
-      static_cast<uint32_t>((clamped_time - stamp.sec) * 1000000000.0);
+  stamp.nanosec = static_cast<uint32_t>(
+      (clamped_time - static_cast<double>(stamp.sec)) * 1000000000.0);
   return stamp;
 }
 
@@ -136,7 +117,7 @@ class Ros2Bridge {
       }
       return;
     }
-    if (!ValidateCommand(m)) {
+    if (!ValidateCommand()) {
       if (latest_command_ != last_invalid_command_logged_) {
         RCLCPP_WARN(node_->get_logger(),
                     "Rejected invalid /joint_command; no actuator was written");
@@ -145,110 +126,57 @@ class Ros2Bridge {
       return;
     }
 
-    bool command_was_clamped = false;
-    std::string clamped_joint_name;
-    double first_requested_effort = 0.0;
-    double first_clamped_effort = 0.0;
+    wheel_leg_common::ControlCommand command;
+    command.stamp = ToCommonTime(d->time);
+    command.joint_efforts.reserve(latest_command_->joint_names.size());
     for (std::size_t i = 0; i < latest_command_->joint_names.size(); ++i) {
-      const std::string& joint_name = latest_command_->joint_names[i];
-      const int actuator_id = actuator_ids_by_ros_name_[joint_name];
-      double effort = latest_command_->efforts[i];
-      if (m->actuator_ctrllimited[actuator_id]) {
-        const double min_ctrl = m->actuator_ctrlrange[2 * actuator_id];
-        const double max_ctrl = m->actuator_ctrlrange[2 * actuator_id + 1];
-        const double requested_effort = effort;
-        effort = std::clamp(effort, min_ctrl, max_ctrl);
-        if (effort != requested_effort) {
-          if (!command_was_clamped) {
-            clamped_joint_name = joint_name;
-            first_requested_effort = requested_effort;
-            first_clamped_effort = effort;
-          }
-          command_was_clamped = true;
-        }
-      }
-      d->ctrl[actuator_id] = effort;
+      wheel_leg_common::JointEffortCommand joint_effort;
+      joint_effort.joint_name = latest_command_->joint_names[i];
+      joint_effort.effort = latest_command_->efforts[i];
+      command.joint_efforts.push_back(std::move(joint_effort));
     }
-    if (command_was_clamped &&
+
+    const ApplyCommandResult result = ApplyControlCommand(m, d, command);
+    if (!result.accepted) {
+      if (latest_command_ != last_invalid_command_logged_) {
+        RCLCPP_WARN(node_->get_logger(),
+                    "Rejected /joint_command for unsupported joint '%s'; no actuator was written",
+                    result.rejected_joint_name.c_str());
+        last_invalid_command_logged_ = latest_command_;
+      }
+      return;
+    }
+
+    if (result.command_was_clamped &&
         latest_command_ != last_clamped_command_logged_) {
       RCLCPP_WARN(node_->get_logger(),
                   "Clamped /joint_command for %s from %.3f to %.3f",
-                  clamped_joint_name.c_str(), first_requested_effort,
-                  first_clamped_effort);
+                  result.first_clamped_joint_name.c_str(),
+                  result.first_requested_effort,
+                  result.first_applied_effort);
       last_clamped_command_logged_ = latest_command_;
     }
     if (latest_command_ != last_applied_command_logged_) {
       RCLCPP_INFO(node_->get_logger(),
                   "Applied /joint_command to %zu actuator(s)",
-                  latest_command_->joint_names.size());
+                  result.applied_effort_count);
       last_applied_command_logged_ = latest_command_;
     }
     command_timeout_logged_ = false;
   }
 
  private:
-  void EnsureMappings(const mjModel* m) {
-    if (mappings_initialized_ || !m) {
-      return;
-    }
-    for (const JointMapping& mapping : kJointMappings) {
-      const int joint_id = mj_name2id(m, mjOBJ_JOINT, mapping.mujoco_joint);
-      const int actuator_id =
-          mj_name2id(m, mjOBJ_ACTUATOR, mapping.mujoco_actuator);
-      if (joint_id >= 0) {
-        joint_ids_by_ros_name_[mapping.ros_name] = joint_id;
-      }
-      if (actuator_id >= 0) {
-        actuator_ids_by_ros_name_[mapping.ros_name] = actuator_id;
-      }
-    }
-    mappings_initialized_ = true;
-  }
-
   void PublishJointState(const mjModel* m, const mjData* d) {
-    EnsureMappings(m);
-    sensor_msgs::msg::JointState msg;
-    msg.header.stamp = ToRosTime(d->time);
-    msg.name.reserve(kJointMappings.size());
-    msg.position.reserve(kJointMappings.size());
-    msg.velocity.reserve(kJointMappings.size());
-
-    for (const JointMapping& mapping : kJointMappings) {
-      const auto id_iter = joint_ids_by_ros_name_.find(mapping.ros_name);
-      if (id_iter == joint_ids_by_ros_name_.end()) {
-        continue;
-      }
-      const int joint_id = id_iter->second;
-      msg.name.emplace_back(mapping.ros_name);
-      msg.position.push_back(d->qpos[m->jnt_qposadr[joint_id]]);
-      msg.velocity.push_back(d->qvel[m->jnt_dofadr[joint_id]]);
-    }
-    joint_state_pub_->publish(msg);
+    const wheel_leg_common::JointStateSample sample = SampleJointState(m, d);
+    joint_state_pub_->publish(wheel_leg_bridge::ToRosJointState(sample));
   }
 
   void PublishImu(const mjModel* m, const mjData* d) {
-    const std::array<double, 4> quat = ReadQuaternionSensor(m, d, "base_quat");
-    const std::array<double, 3> gyro = ReadVectorSensor(m, d, "base_gyro");
-    const std::array<double, 3> accel = ReadVectorSensor(m, d, "base_accel");
-
-    sensor_msgs::msg::Imu msg;
-    msg.header.stamp = ToRosTime(d->time);
-    msg.header.frame_id = kBaseFrameId;
-    msg.orientation.x = quat[1];
-    msg.orientation.y = quat[2];
-    msg.orientation.z = quat[3];
-    msg.orientation.w = quat[0];
-    msg.angular_velocity.x = gyro[0];
-    msg.angular_velocity.y = gyro[1];
-    msg.angular_velocity.z = gyro[2];
-    msg.linear_acceleration.x = accel[0];
-    msg.linear_acceleration.y = accel[1];
-    msg.linear_acceleration.z = accel[2];
-    imu_pub_->publish(msg);
+    const wheel_leg_common::ImuSample sample = SampleImu(m, d);
+    imu_pub_->publish(wheel_leg_bridge::ToRosImu(sample));
   }
 
-  bool ValidateCommand(const mjModel* m) {
-    EnsureMappings(m);
+  bool ValidateCommand() {
     if (!latest_command_) {
       return false;
     }
@@ -259,8 +187,7 @@ class Ros2Bridge {
       if (!std::isfinite(latest_command_->efforts[i])) {
         return false;
       }
-      if (actuator_ids_by_ros_name_.find(latest_command_->joint_names[i]) ==
-          actuator_ids_by_ros_name_.end()) {
+      if (!wheel_leg_common::IsKnownJointName(latest_command_->joint_names[i])) {
         return false;
       }
     }
@@ -268,7 +195,6 @@ class Ros2Bridge {
   }
 
   bool owns_rclcpp_context_ = false;
-  bool mappings_initialized_ = false;
   bool enable_ros_command_ = false;
   bool pending_command_update_ = false;
   bool has_command_ = false;
@@ -285,8 +211,6 @@ class Ros2Bridge {
   wheel_leg_msgs::msg::JointCommand::SharedPtr last_applied_command_logged_;
   wheel_leg_msgs::msg::JointCommand::SharedPtr last_clamped_command_logged_;
   wheel_leg_msgs::msg::JointCommand::SharedPtr last_invalid_command_logged_;
-  std::unordered_map<std::string, int> joint_ids_by_ros_name_;
-  std::unordered_map<std::string, int> actuator_ids_by_ros_name_;
 };
 
 std::unique_ptr<Ros2Bridge> g_bridge;
