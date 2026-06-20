@@ -12,11 +12,18 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT wheel_leg_simulate)
 
 option(WHEEL_LEG_USE_SYSTEM_MUJOCO "Use an installed MuJoCo package when available." ON)
 option(WHEEL_LEG_USE_SYSTEM_GLFW "Use an installed GLFW package when available." ON)
+option(WHEEL_LEG_ENABLE_ROS2 "Build the ROS2 topic bridge." ON)
 
 set(MUJOCO_PATH "" CACHE PATH "MuJoCo install root. Example: C:/mujoco-3.2.6")
 set(GLFW_ROOT "" CACHE PATH "Optional GLFW install root")
 
 find_package(Threads REQUIRED)
+
+if(WHEEL_LEG_ENABLE_ROS2)
+  find_package(rclcpp REQUIRED)
+  find_package(sensor_msgs REQUIRED)
+  find_package(wheel_leg_msgs REQUIRED)
+endif()
 
 function(_wheel_leg_set_imported_runtime target runtime_path)
   if(WIN32 AND EXISTS "${runtime_path}")
@@ -231,6 +238,7 @@ add_executable(wheel_leg_simulate
   mujoco_ui/glfw_dispatch.cc
   mujoco_ui/platform_ui_adapter.cc
   mujoco_ui/simulate.cc
+  wheel_leg/ros2_bridge.cc
   wheel_leg/wheel_leg_hooks.cc
   tools/sensor.cc
   tools/actuator.cc
@@ -249,18 +257,27 @@ target_include_directories(wheel_leg_simulate PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tools
 )
 
-target_link_libraries(wheel_leg_simulate PRIVATE
+target_link_libraries(wheel_leg_simulate
   ${MUJOCO_TARGET}
   ${GLFW_TARGET}
   Threads::Threads
 )
+
+if(WHEEL_LEG_ENABLE_ROS2)
+  target_compile_definitions(wheel_leg_simulate PRIVATE WHEEL_LEG_ENABLE_ROS2)
+  ament_target_dependencies(wheel_leg_simulate
+    rclcpp
+    sensor_msgs
+    wheel_leg_msgs
+  )
+endif()
 
 if(APPLE)
   target_sources(wheel_leg_simulate PRIVATE mujoco_ui/glfw_corevideo.mm)
 endif()
 
 if(UNIX AND NOT APPLE)
-  target_link_libraries(wheel_leg_simulate PRIVATE dl)
+  target_link_libraries(wheel_leg_simulate dl)
 endif()
 
 if(WIN32)

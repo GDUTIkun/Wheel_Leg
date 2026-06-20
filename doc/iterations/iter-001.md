@@ -33,8 +33,8 @@ MuJoCo actuator
 - 不实现完整 `ros2_control` 硬件接口。
 - 不完成 LQR、VMC、PID 控制器外移。
 - 不定义 `/robot_state`、`/body_cmd` 的自定义消息字段。
-- 不固定 `/joint_command` 的具体消息类型。
-- 不固定状态发布频率或控制频率。
+- 不扩展 `/joint_command` 已确认字段以外的命令语义。
+- 不固定当前已确认状态发布频率和命令处理边界以外的控制频率。
 - 不修改 `transplant/` 下的 MuJoCo 代码。
 
 ## 3. 涉及模块
@@ -72,7 +72,8 @@ MuJoCo actuator
 - `doc/detail.md` 详细设计文档。
 - 明确当前迭代模块边界。
 - 明确 `/joint_states` 和 `/imu` 的标准消息方向。
-- 明确 `/joint_command` 只作为语义占位，不固定消息类型。
+- 明确 `/joint_command` 使用 `wheel_leg_msgs/msg/JointCommand`。
+- 明确状态发布频率、命令处理边界和时间戳策略。
 - 明确当前待确认问题。
 
 ## 6. 最小实现任务
@@ -124,16 +125,12 @@ MuJoCo actuator
 ## 10. 风险点
 
 - ROS2 spin 与 MuJoCo step 线程关系未确认。
-- `/joint_command` 消息类型未确认，后续实现前需要单独确认。
-- 状态发布频率和控制频率未确认。
-- actuator 名称、顺序、方向和限幅未形成完整接口表。
+- `/joint_command` 消息文件尚未创建。
+- ROS2 spin 与 MuJoCo step 的线程关系未确认。
+- actuator 方向仍需通过仿真验证。
 - 当前 MuJoCo 内部已有控制逻辑，命令桥接可能与现有控制输出冲突。
 - 过早把控制器写入桥接层会造成新的耦合。
 
 ## 11. 需要用户确认的问题
 
-- `/joint_command` 具体使用标准消息、数组消息还是自定义消息。
-- 关节命名表和 actuator 映射表。
-- 状态发布频率和命令处理频率。
-- MuJoCo 内现有控制逻辑与 ROS2 命令的优先级关系。
 - 是否需要为调试命令单独使用命名空间或测试 topic。

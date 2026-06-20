@@ -13,13 +13,13 @@
 3. `doc/architecture.md`
 4. `doc/iterations/iter-001.md`
 5. `doc/detail.md`
-6. `doc/validation.md`
+6. `doc/tasks/progress.md`
+7. 当前任务涉及的 `doc/tasks/<module-name>.md`
+8. `doc/validation.md`
 
 如果后续生成了以下文档，也需要在相关任务开始前阅读：
 
-1. `doc/tasks/progress.md`
-2. `doc/tasks/<module-name>.md`
-3. `doc/decisions.md`
+1. `doc/decisions.md`
 
 如果某个推荐文档不存在，不要自行虚构内容。应说明缺失情况，并根据当前已存在文档继续处理；如果缺失文档会影响任务边界，先向用户确认。
 
@@ -45,8 +45,8 @@ Iteration 001: ROS2-MuJoCo Topic 桥接
 - 完整 `ros2_control` 硬件接口。
 - LQR、VMC、PID 控制器完整外移。
 - `/robot_state`、`/body_cmd` 自定义消息字段设计。
-- 固定 `/joint_command` 的具体消息类型。
-- 固定状态发布频率或控制频率。
+- 扩展 `/joint_command` 已确认字段以外的命令语义。
+- 固定当前已确认状态发布频率和命令处理边界以外的控制频率。
 
 ## 3. 工作规则
 
@@ -70,22 +70,36 @@ Iteration 001: ROS2-MuJoCo Topic 桥接
 
 - `/joint_states` 使用 `sensor_msgs/msg/JointState`。
 - `/imu` 使用 `sensor_msgs/msg/Imu`。
-- `/joint_command` 只作为语义占位，具体消息类型待确认。
+- `/joint_command` 使用自定义消息 `wheel_leg_msgs/msg/JointCommand`。
+- `/joint_command` 字段为 `std_msgs/Header header`、`string[] joint_names`、`float64[] efforts`。
+- `/joint_command` 使用关节名映射，`joint_names` 与 `efforts` 一一对应。
+- `/joint_command` 当前只表达 effort 命令，单位为 Nm。
+- ROS 侧 canonical 关节命名表和顺序：`left_hip`、`left_knee`、`left_wheel`、`right_hip`、`right_knee`、`right_wheel`。
+- actuator 映射表：`left_hip` -> `left_hip_motor`，`left_knee` -> `left_knee_motor`，`left_wheel` -> `left_wheel_motor`，`right_hip` -> `right_hip_motor`，`right_knee` -> `right_knee_motor`，`right_wheel` -> `right_wheel_motor`。
+- `/joint_states` 和 `/imu` 发布频率为 `100 Hz`。
+- `/joint_states.header.stamp` 和 `/imu.header.stamp` 使用 MuJoCo 仿真时间 `d->time`。
+- `/joint_command` 命令处理跟随 MuJoCo step，每个 step 处理一次最新有效命令。
+- `/imu` 使用 MuJoCo sensor：`base_quat`、`base_gyro`、`base_accel`。
+- `/imu.header.frame_id` 使用 `base_link`。
+- `/imu.orientation` 将 MuJoCo `base_quat` 的 `w,x,y,z` 顺序转换为 ROS `x,y,z,w`。
+- `/imu` 当前不做轴重映射，按 `base_link` 机体系直接发布；covariance 全 0，表示未知。
+- ROS2 节点名为 `mujoco_bridge`，当前不使用 topic namespace。
+- `/joint_states.effort` 当前不填充。
+- ROS spin 策略为同线程，在 MuJoCo step 边界调用 `rclcpp::spin_some` 或等价非阻塞处理。
+- ROS2 命令接管使用 `enable_ros_command`，默认 `false`；为 `true` 时 ROS `/joint_command` 在 step 末尾覆盖对应 actuator。
+- `/joint_command` 超时时间为 `0.2 s`，超时后停止应用 ROS 命令并回到不接管 actuator 行为，不自动清零 actuator。
+- 命令限幅使用 MuJoCo actuator `ctrlrange`。
+- 无效 `/joint_command` 整条拒绝，不写入任何 actuator。
 - `/robot_state` 只作为语义占位，当前迭代不定义字段。
 - `/body_cmd` 只作为语义占位，当前迭代不定义字段。
-- 状态发布频率和控制频率待确认。
-- actuator 映射表待确认。
 
 实现时禁止自行固定以下内容：
 
-- `/joint_command` 消息类型。
 - `/robot_state` 自定义消息字段。
 - `/body_cmd` 自定义消息字段。
-- 控制频率。
-- 状态发布频率。
-- actuator 名称映射表。
-- 命令限幅数值。
-- ROS2 命令与现有 MuJoCo 内部站立控制的优先级。
+- `/joint_command` 以外的命令字段、控制模式或扩展语义。
+- MuJoCo actuator `ctrlrange` 以外的命令限幅数值。
+- `enable_ros_command` 以外的 ROS2 命令接管策略。
 
 以上内容如影响当前任务，必须先向用户提问。
 
@@ -93,17 +107,25 @@ Iteration 001: ROS2-MuJoCo Topic 桥接
 
 如果用户没有指定具体任务，优先从以下最小任务中选择一个，并在动手前说明选择理由：
 
-1. 生成或更新 `doc/tasks/mujoco_bridge.md`。
-2. 生成或更新 `doc/tasks/progress.md`。
-3. 确认 `/joint_command` 消息类型。
-4. 确认关节命名与 actuator 映射表。
-5. 确认状态发布频率和命令处理频率。
-6. 实现 `/joint_states` 发布的最小代码改动。
-7. 实现 `/imu` 发布的最小代码改动。
-8. 实现 `/joint_command` 订阅的最小代码改动。
-9. 实现 MuJoCo actuator 写入边界。
+1. 阅读 `doc/tasks/progress.md`，确认当前阻塞项和推荐执行顺序。
+2. 创建并验证 `wheel_leg_msgs/msg/JointCommand.msg`。
+3. 选择 `doc/tasks/mujoco_bridge.md` 中一个最小任务。
+4. 选择 `doc/tasks/joint_state_publisher.md` 中一个最小任务。
+5. 选择 `doc/tasks/imu_publisher.md` 中一个最小任务。
+6. 选择 `doc/tasks/joint_command_subscriber.md` 中一个最小任务。
+7. 选择 `doc/tasks/actuator_writer.md` 中一个最小任务。
 
 如果无法确定应该做哪个任务，先列出可选任务并向用户提问。
+
+当前任务文档：
+
+- `doc/tasks/progress.md`
+- `doc/tasks/interface_constraints.md`
+- `doc/tasks/mujoco_bridge.md`
+- `doc/tasks/joint_state_publisher.md`
+- `doc/tasks/imu_publisher.md`
+- `doc/tasks/joint_command_subscriber.md`
+- `doc/tasks/actuator_writer.md`
 
 ## 6. 修改完成后的输出要求
 

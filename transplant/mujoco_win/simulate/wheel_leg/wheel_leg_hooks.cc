@@ -7,6 +7,7 @@
 #include "pid.h"
 #include "actuator.h"
 #include "lqr_k.h"
+#include "ros2_bridge.h"
 
 #include <cmath>
 #include <iomanip>
@@ -157,10 +158,12 @@ void OnModelLoaded(mjModel* m, mjData* d) {
             << " actuator sliders to change torque." << std::endl;
   std::cout << "Fixed stand target: phi=90deg, distance=0m, velocity=0m/s, "
             << "yaw-rate=0deg/s." << std::endl;
+  InitializeRos2Bridge(m, d);
 }
 
 void BeforeStep(mjModel* m, mjData* d) {
   static int step_count = 0;
+  SpinRos2Bridge(m, d);
   // Leave d->ctrl untouched here so the built-in simulate UI sliders
   // can directly control actuator torque values.
   if (!pid_initialized) {
@@ -225,6 +228,7 @@ void BeforeStep(mjModel* m, mjData* d) {
   const double left_wheel_torque = LQR_L.wheel_torque - steer_output;
   Set_Val(m, d, "right_wheel_motor", right_wheel_torque);
   Set_Val(m, d, "left_wheel_motor", left_wheel_torque);
+  ApplyRos2Command(m, d);
 
   // PlotLines("phi", "Phi Tracking", "%.1f deg",
   //           {{"target", RadiansToDegrees(target_phi)},
@@ -313,6 +317,7 @@ void BeforeStep(mjModel* m, mjData* d) {
 
 void AfterStep(const mjModel* m, const mjData* d) {
   static int step_count = 0;
+  PublishRos2State(m, d);
   if (step_count % 120 == 0) {
     
     // PrintSensors(m, d)

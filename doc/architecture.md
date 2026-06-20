@@ -254,12 +254,10 @@ MuJoCo d->ctrl
 
 以下内容尚未确认，不能在当前迭代中固定为实现约束：
 
-- `/joint_command` 的具体 ROS2 message 类型。
 - `/robot_state` 的具体 message 类型和字段。
 - `/body_cmd` 的具体 message 类型和字段。
-- 状态发布频率。
-- 控制命令处理频率。
-- MuJoCo actuator 与统一关节命令的完整映射表。
+- `/joint_command` 的 ROS2 消息文件尚未创建。
+- MuJoCo actuator 方向、限幅与统一关节命令的安全策略。
 - 真机关节正方向、零位和限幅。
 - STM32 通信协议和通信频率。
 - 遥控器接收机协议。
@@ -269,5 +267,5 @@ MuJoCo d->ctrl
 
 - 当前 Topic 桥接后续可能演进为 `MuJoCoHardware`。
 - `/control_mode` 当前可使用简单字符串语义，后续可能改为枚举型自定义消息。
-- `/joint_command` 当前只做语义占位，后续可能选择标准消息、数组消息或自定义消息。
+- `/joint_command` 当前使用 `wheel_leg_msgs/msg/JointCommand`，后续可根据控制模式扩展或替换字段。
 - 当前控制器逐步外移策略可能根据仿真稳定性分多轮完成。
