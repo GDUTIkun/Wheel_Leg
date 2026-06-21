@@ -175,7 +175,7 @@ transplant/mujoco_win/simulate/tools/
 
 ```text
 应用输入层
-  - 遥控器输入节点
+  - `rc_ibus_node`
   - 调试命令节点
   - 后续上层规划节点
 
@@ -214,6 +214,7 @@ transplant/mujoco_win/simulate/tools/
 - MuJoCo sim adapter 边界
 - controller orchestration 边界
 - algorithm library 提取边界
+- `rc_ibus_node` 的 UART / 协议 / 映射边界
 
 ## 7. ROS2 节点划分
 
@@ -225,6 +226,7 @@ transplant/mujoco_win/simulate/tools/
 | --- | --- | --- |
 | MuJoCo bridge 节点 | 连接仿真状态与 ROS2 topic | 已有基础能力，进入长期边界重整 |
 | controller node | 长期控制流程入口 | 当前迭代定义职责，不直接实现完整迁移 |
+| `rc_ibus_node` | Raspberry Pi 遥控器输入节点 | 第二阶段开始展开 |
 | 调试命令节点 | 手动发布测试命令 | 当前仍可作为验证手段 |
 
 ### 7.2 后续节点概览
@@ -233,8 +235,16 @@ transplant/mujoco_win/simulate/tools/
 | --- | --- | --- |
 | 控制器节点 | 运行控制编排和算法调用 | 当前迭代定义边界 |
 | 控制模式节点 | 管理站立、失能、速度控制等模式 | 当前迭代不展开 |
-| 遥控器输入节点 | 将接收机输入转换为统一命令 | 当前迭代不展开 |
+| `rc_ibus_node` | 在树莓派上解包 `iBUS` 并发布原始通道与统一命令 | 当前迭代细化规格 |
 | STM32 通信节点 | 与真实硬件通信 | 当前迭代不展开 |
+
+`rc_ibus_node` 当前固定职责：
+
+- 打开 `/dev/ttyAMA3` 并以 `115200 8N1` 接收 `FS-iA6B` 的 `iBUS` 数据。
+- 解析 32-byte `iBUS` 数据帧，校验 `0xFFFF - 前30字节和`。
+- 发布 `/rc/channels_raw` 和 `/rc/status`。
+- 在节点内部完成通道归一化、死区、方向反转、开关离散化和 failsafe 处理。
+- 发布 `/cmd_vel`、`/control_mode` 和 `/body_cmd`。
 
 ## 8. 仿真环境与实机环境接口对应关系
 
@@ -242,6 +252,8 @@ transplant/mujoco_win/simulate/tools/
 | --- | --- | --- |
 | `/joint_states` | MuJoCo 状态采样后发布 | STM32 编码器和电机反馈 |
 | `/imu` | MuJoCo IMU 采样后发布 | STM32 IMU 数据 |
+| `/rc/channels_raw` | 不适用 | `rc_ibus_node` 解析树莓派 UART 后发布 |
+| `/rc/status` | 不适用 | `rc_ibus_node` 发布遥控链路诊断状态 |
 | `/joint_command` | 控制侧下发到 sim adapter | 下发到 STM32 电机命令 |
 | `RobotStateSnapshot` | 由仿真状态聚合生成 | 由真机状态聚合生成 |
 | `ControlCommand` | 写入 MuJoCo actuator | 下发到真实执行器 |
@@ -303,11 +315,13 @@ MuJoCo actuator
 
 - 维护 ROS2 话题接口。
 - 不承载控制算法。
+- 可复用消息转换能力，但不承载 `iBUS` 协议解包逻辑。
 
 ### `wheel_leg_control`
 
 - 维护控制流程入口。
 - 不直接依赖 MuJoCo API。
+- 只消费统一命令，不直接订阅遥控原始通道。
 
 ### `wheel_leg_sim`
 
@@ -319,6 +333,12 @@ MuJoCo actuator
 - 维护共享数据结构和数学工具。
 - 不依赖 ROS2 node 类型或 MuJoCo runtime hook。
 
+### `rc_ibus_node`
+
+- 维护 Raspberry Pi 串口读取、`iBUS` 解包、通道预处理和 failsafe。
+- 对外发布 `/rc/channels_raw`、`/rc/status`、`/cmd_vel`、`/control_mode`、`/body_cmd`。
+- 不参与控制算法计算。
+
 ## 12. 当前不做什么
 
 当前阶段明确不做：
@@ -326,7 +346,6 @@ MuJoCo actuator
 - 不更换动力学模型。
 - 不重新设计 LQR 数学模型。
 - 不引入 STM32 通信实现。
-- 不引入遥控器输入实现。
 - 不定义完整状态机。
 - 不实现完整 `ros2_control`。
 - 不在本轮删除 `transplant/`。
@@ -336,3 +355,30 @@ MuJoCo actuator
 - controller node 的最终 topic 组织是否需要 namespace。
 - 后续 STM32 接口在 ROS2 层使用 topic、service 还是更底层 transport。
 - 新动力学模型替换后，算法参数是否继续沿用当前结构。
+
+## 14. `rc_ibus_node` 对外接口
+
+当前阶段固定以下 ROS2 输出接口：
+
+| Topic | 推荐消息类型 | 说明 |
+| --- | --- | --- |
+| `/rc/channels_raw` | 后续按需定义 | 遥控原始通道值、时间戳和帧有效标志 |
+| `/rc/status` | 后续按需定义 | 遥控串口在线状态、错误计数和 failsafe 状态 |
+| `/cmd_vel` | `geometry_msgs/msg/Twist` | 期望线速度与角速度 |
+| `/control_mode` | `std_msgs/msg/String` | 控制模式切换命令 |
+| `/body_cmd` | 后续按需定义 | 机身附加控制目标，当前优先承载高度与转向辅助控制量 |
+
+接口语义约束：
+
+- `/rc/channels_raw` 和 `/rc/status` 只服务调试、标定、排障和输入链路诊断。
+- 控制器长期只消费 `/cmd_vel`、`/control_mode`、`/body_cmd` 等统一命令。
+- 控制器不直接感知 `iBUS` 协议，也不直接订阅原始通道。
+
+## 15. 第二阶段验收补充
+
+第二阶段在架构层补充以下验收条件：
+
+- Raspberry Pi 上可直接查看 `/rc/channels_raw` 和 `/rc/status`。
+- `rc_ibus_node` 可在树莓派上完成 `FS-iA6B` 的 `iBUS` 解包，不依赖地面站。
+- `/cmd_vel`、`/control_mode`、`/body_cmd` 的统一命令接口可被遥控器稳定驱动。
+- 失联、串口超时或持续坏帧时，输入链路进入 failsafe，控制器侧仍只看到安全统一命令。
