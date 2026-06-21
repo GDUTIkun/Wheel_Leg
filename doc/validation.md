@@ -30,6 +30,7 @@
 | `iter-002` 过渡编排最小启动验证 | 仿真 | 已通过 | 过渡编排切到正式算法接口后，MuJoCo 仍可加载模型并完成 `OnModelLoaded` 与 ROS2 bridge 初始化 |
 | `rc_ibus_node` 串口接收与 `iBUS` 解包 | 实机 | 已通过 | `/dev/ttyAMA3` 可稳定接收合法 `iBUS` 帧，`checksum_errors=0`，`/rc/channels_raw` 可持续发布 |
 | 遥控器统一命令映射 | 实机 | 已通过 | 已确认真实通道布局，`/cmd_vel`、`/control_mode`、`/body_cmd` 与急停映射符合预期 |
+| 遥控器统一命令接入仿真控制链 | 实机 / 仿真 | 已通过 | `rc_ibus_node`、`wheel_leg_controller_node` 与 `mujoco_bridge` 已联通；`disabled`、`stand`、`velocity` 与主速度摇杆映射在仿真联调中符合预期 |
 | STM32 真机通信 | 实机 | 不适用 | 不属于 `iter-001` |
 | 遥控器输入 | 实机 / 仿真 | 不适用 | 不属于 `iter-001` |
 
@@ -648,6 +649,34 @@ MuJoCo actuator
 - 是否通过：已通过
 - 结论：当前 `/imu` 使用 `base_link` 机体系直接发布、无需额外轴重映射的实现与模型挂载关系一致。
 - 下一步建议：若后续状态估计或可视化对坐标语义提出更严格要求，可在带显示环境中补充姿态动作验证。
+
+### VAL-022: `iter-003` 遥控器统一命令接入仿真控制链验证
+
+- 日期：2026-06-22
+- 对应迭代：`iter-003`
+- 测试环境：实机 + 仿真 + ROS2
+- 测试目标：验证真实遥控器经 `rc_ibus_node` 发布统一命令后，是否可驱动 `wheel_leg_controller_node` 与 `mujoco_bridge` 完成仿真控制链联调，并确认 `control_mode` 与主速度摇杆映射在仿真侧保持一致
+- 测试步骤：
+  1. 执行 `source /opt/ros/jazzy/setup.bash && source install/setup.bash && export ROS_DOMAIN_ID=120`
+  2. 启动仿真：`build/wheel_leg_simulate/wheel_leg_simulate transplant/mujoco_win/model/scence.xml`
+  3. 启动 controller：`ros2 run wheel_leg_control wheel_leg_controller_node`
+  4. 执行 `ros2 param set /mujoco_bridge enable_ros_command true`
+  5. 启动遥控输入：`ros2 run wheel_leg_rc rc_ibus_node`
+  6. 观察 `/rc/status`、`/control_mode`、`/cmd_vel`，并现场拨动 `CH5`、`CH6`、`CH2`、`CH4`
+- 观察结果：
+  - 仿真日志出现 `ROS2 MuJoCo bridge ready`，controller 日志出现 `Controller dt sample ... 0.002...`，说明 `/robot_state -> controller -> /joint_command` 链路正常
+  - `mujoco_bridge` 日志出现 `Applied /joint_command to 6 actuator(s)`，说明遥控统一命令已真实进入仿真 actuator 接管链
+  - 测试过程中出现过一次 `/joint_command timed out after 0.200 s; actuator writes are suspended`，同时 controller 短时进入 `rc_status_timeout` fallback，随后恢复到 `disabled` 正常模式
+  - `/rc/status` 观察正常，链路恢复后可持续工作
+  - `CH5` 急停开关对应 `disabled <-> stand` 切换，`CH6` 三段开关对应 `stand <-> velocity` 切换，符合既定映射
+  - 在 `velocity` 模式下，`CH2` 仅驱动 `/cmd_vel.linear.x` 正负变化，`CH4` 仅驱动 `/cmd_vel.angular.z` 正负变化，方向与预期一致
+- 是否通过：已通过
+- 结论边界：
+  - 本次确认“真实遥控器 -> 统一命令 -> ROS controller -> MuJoCo bridge”联调链已接通，且关键模式/摇杆语义在仿真侧未漂移
+  - 本次尚未验证长时间 `velocity` 模式下的整机动力学表现，也未验证断链后整机姿态恢复过程
+- 下一步建议：
+  - 继续在仿真中验证 `stand` 与 `velocity` 模式下的整机行为
+  - 补一次更明确的 failsafe 场景测试，确认断链或停发后模式退回与机器人响应是否符合预期
 
 ## 5. 待确认问题
 
