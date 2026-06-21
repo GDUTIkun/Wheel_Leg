@@ -1,0 +1,16 @@
+std_msgs/Header header
+float64 body_distance
+float64 body_velocity
+float64 body_pitch
+float64 body_pitch_rate
+float64 body_yaw_rate
+float64 left_hip_absolute
+float64 left_calf_absolute
+float64 left_leg_length
+float64 left_phi
+float64 left_phi_rate
+float64 right_hip_absolute
+float64 right_calf_absolute
+float64 right_leg_length
+float64 right_phi
+float64 right_phi_rate

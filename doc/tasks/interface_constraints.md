@@ -17,7 +17,7 @@
 - `[x]` 确认 `/joint_command` 自定义消息字段。
 - `[x]` 确认关节命名表。
 - `[x]` 确认 actuator 映射表。
-- `[x]` 确认状态发布频率：`100 Hz`。
+- `[x]` 确认状态发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - `[x]` 确认命令处理频率：每个 MuJoCo step 处理一次最新有效命令。
 - `[x]` 确认 `/imu` frame id 和坐标系定义。
 - `[x]` 确认时间戳策略：状态消息使用 MuJoCo 仿真时间 `d->time`。
@@ -85,7 +85,7 @@
   - `right_knee` -> `right_knee_joint` -> `right_knee_motor`
   - `right_wheel` -> `right_wheel_joint` -> `right_wheel_motor`
 - MuJoCo 中的 `left_connect2_joint`、`left_calf_joint`、`right_connect2_joint`、`right_calf_joint` 当前不进入 `/joint_command`。
-- `/joint_states` 和 `/imu` 状态发布频率为 `100 Hz`。
+- `/joint_states`、`/imu` 和 `/robot_state` 状态发布频率为每个 MuJoCo step，当前约 `500 Hz`。
 - `/joint_command` 命令处理跟随 MuJoCo step，每个 step 处理一次最新有效命令。
 - `/joint_states.header.stamp` 和 `/imu.header.stamp` 使用 MuJoCo 仿真时间 `d->time` 转换为 ROS time。
 - `/imu` 使用 MuJoCo sensor：`base_quat`、`base_gyro`、`base_accel`。

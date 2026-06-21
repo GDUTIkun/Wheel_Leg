@@ -1,20 +1,20 @@
 #ifndef WHEEL_LEG_CONTROL__STATE_ASSEMBLER_HPP_
 #define WHEEL_LEG_CONTROL__STATE_ASSEMBLER_HPP_
 
-#include <wheel_leg_common/types.hpp>
+#include "wheel_leg_control/stand_control_types.hpp"
 
 namespace wheel_leg_control {
 
 class StateAssembler {
  public:
-  void UpdateJointState(const wheel_leg_common::JointStateSample& joint_state);
-  void UpdateImu(const wheel_leg_common::ImuSample& imu);
+  void UpdateControlState(const StandControlState& control_state);
 
   bool HasCompleteState() const;
-  wheel_leg_common::RobotStateSnapshot BuildSnapshot() const;
+  const StandControlState& BuildState() const;
 
  private:
-  wheel_leg_common::RobotStateSnapshot snapshot_;
+  bool has_control_state_ = false;
+  StandControlState control_state_;
 };
 
 }  // namespace wheel_leg_control

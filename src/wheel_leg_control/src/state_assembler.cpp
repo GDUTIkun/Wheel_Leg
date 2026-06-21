@@ -2,23 +2,18 @@
 
 namespace wheel_leg_control {
 
-void StateAssembler::UpdateJointState(
-    const wheel_leg_common::JointStateSample& joint_state) {
-  snapshot_.joint_state = joint_state;
-  snapshot_.has_joint_state = true;
-}
-
-void StateAssembler::UpdateImu(const wheel_leg_common::ImuSample& imu) {
-  snapshot_.imu = imu;
-  snapshot_.has_imu = true;
+void StateAssembler::UpdateControlState(
+    const StandControlState& control_state) {
+  control_state_ = control_state;
+  has_control_state_ = true;
 }
 
 bool StateAssembler::HasCompleteState() const {
-  return snapshot_.has_joint_state && snapshot_.has_imu;
+  return has_control_state_;
 }
 
-wheel_leg_common::RobotStateSnapshot StateAssembler::BuildSnapshot() const {
-  return snapshot_;
+const StandControlState& StateAssembler::BuildState() const {
+  return control_state_;
 }
 
 }  // namespace wheel_leg_control

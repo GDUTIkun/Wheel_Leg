@@ -18,6 +18,9 @@ sensor_msgs::msg::JointState ToRosJointState(
 
 sensor_msgs::msg::Imu ToRosImu(const wheel_leg_common::ImuSample& sample);
 
+wheel_leg_common::ControlCommand FromRosJointCommand(
+    const wheel_leg_msgs::msg::JointCommand& msg);
+
 wheel_leg_msgs::msg::JointCommand ToRosJointCommand(
     const wheel_leg_common::ControlCommand& command);
 

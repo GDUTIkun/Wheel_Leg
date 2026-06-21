@@ -97,6 +97,20 @@ sensor_msgs::msg::Imu ToRosImu(const wheel_leg_common::ImuSample& sample) {
   return msg;
 }
 
+wheel_leg_common::ControlCommand FromRosJointCommand(
+    const wheel_leg_msgs::msg::JointCommand& msg) {
+  wheel_leg_common::ControlCommand command;
+  command.stamp = ToCommonTime(msg.header.stamp);
+  command.joint_efforts.reserve(msg.joint_names.size());
+  for (std::size_t i = 0; i < msg.joint_names.size(); ++i) {
+    wheel_leg_common::JointEffortCommand joint_effort;
+    joint_effort.joint_name = msg.joint_names[i];
+    joint_effort.effort = i < msg.efforts.size() ? msg.efforts[i] : 0.0;
+    command.joint_efforts.push_back(std::move(joint_effort));
+  }
+  return command;
+}
+
 wheel_leg_msgs::msg::JointCommand ToRosJointCommand(
     const wheel_leg_common::ControlCommand& command) {
   wheel_leg_msgs::msg::JointCommand msg;

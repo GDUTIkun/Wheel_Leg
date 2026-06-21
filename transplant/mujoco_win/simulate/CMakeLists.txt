@@ -23,8 +23,11 @@ if(WHEEL_LEG_ENABLE_ROS2)
   find_package(rclcpp REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(wheel_leg_bridge REQUIRED)
+  find_package(wheel_leg_control REQUIRED)
   find_package(wheel_leg_msgs REQUIRED)
 endif()
+find_package(wheel_leg_sim REQUIRED)
+find_package(wheel_leg_control REQUIRED)
 
 function(_wheel_leg_set_imported_runtime target runtime_path)
   if(WIN32 AND EXISTS "${runtime_path}")
@@ -239,23 +242,18 @@ add_executable(wheel_leg_simulate
   mujoco_ui/glfw_dispatch.cc
   mujoco_ui/platform_ui_adapter.cc
   mujoco_ui/simulate.cc
-  wheel_leg/controller_orchestration.cc
-  wheel_leg/sim_adapter.cc
+  wheel_leg/legacy_stand_control_bridge.cc
   wheel_leg/ros2_bridge.cc
   wheel_leg/wheel_leg_hooks.cc
   tools/sensor.cc
   tools/actuator.cc
   tools/ekf.cc
-  tools/lqr_k.cc
-  tools/pid.cc
-  tools/plotter.cc
-  tools/math_utils.cc
-  tools/vmc.cc
 )
 
 target_include_directories(wheel_leg_simulate PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_common/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_bridge/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_control/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../src/wheel_leg_sim/include
   ${CMAKE_CURRENT_SOURCE_DIR}/app
   ${CMAKE_CURRENT_SOURCE_DIR}/mujoco_ui
@@ -266,6 +264,8 @@ target_include_directories(wheel_leg_simulate PRIVATE
 target_link_libraries(wheel_leg_simulate
   ${MUJOCO_TARGET}
   ${GLFW_TARGET}
+  wheel_leg_control::wheel_leg_control
+  wheel_leg_sim::wheel_leg_sim
   Threads::Threads
 )
 
@@ -276,6 +276,7 @@ if(WHEEL_LEG_ENABLE_ROS2)
     sensor_msgs
     wheel_leg_bridge
     wheel_leg_msgs
+    wheel_leg_sim
   )
 endif()
 

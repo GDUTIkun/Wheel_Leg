@@ -76,7 +76,7 @@ Iteration 001: ROS2-MuJoCo Topic 桥接
 - `/joint_command` 当前只表达 effort 命令，单位为 Nm。
 - ROS 侧 canonical 关节命名表和顺序：`left_hip`、`left_knee`、`left_wheel`、`right_hip`、`right_knee`、`right_wheel`。
 - actuator 映射表：`left_hip` -> `left_hip_motor`，`left_knee` -> `left_knee_motor`，`left_wheel` -> `left_wheel_motor`，`right_hip` -> `right_hip_motor`，`right_knee` -> `right_knee_motor`，`right_wheel` -> `right_wheel_motor`。
-- `/joint_states` 和 `/imu` 发布频率为 `100 Hz`。
+- `/joint_states`、`/imu` 和 `/robot_state` 发布频率为每个 MuJoCo step，当前约 `500 Hz`。
 - `/joint_states.header.stamp` 和 `/imu.header.stamp` 使用 MuJoCo 仿真时间 `d->time`。
 - `/joint_command` 命令处理跟随 MuJoCo step，每个 step 处理一次最新有效命令。
 - `/imu` 使用 MuJoCo sensor：`base_quat`、`base_gyro`、`base_accel`。

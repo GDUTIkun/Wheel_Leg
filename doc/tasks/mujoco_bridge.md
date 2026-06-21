@@ -17,7 +17,7 @@ MuJoCo 桥接节点模块。
 - `[x]` 确认 ROS2 初始化与 MuJoCo 模型加载的先后关系：模型加载后初始化 bridge。
 - `[x]` 确认 ROS2 spin 与 MuJoCo step 是否同线程：同线程，在 MuJoCo step 边界非阻塞处理 ROS 回调。
 - `[x]` 确认桥接节点名称和 topic namespace：节点名 `mujoco_bridge`，当前不使用 namespace。
-- `[x]` 确认状态发布频率：`100 Hz`。
+- `[x]` 确认状态发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - `[x]` 确认命令处理频率：每个 MuJoCo step 处理一次最新有效命令。
 - `[x]` 确认状态消息时间戳策略：使用 MuJoCo 仿真时间 `d->time`。
 - `[x]` 建立 ROS2 节点上下文。
@@ -36,7 +36,7 @@ MuJoCo 桥接节点模块。
 - MuJoCo 数据对象。
 - ROS2 Jazzy 运行环境。
 - 当前仿真时间。
-- 状态发布频率：`100 Hz`。
+- 状态发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - 命令处理频率：每个 MuJoCo step 处理一次最新有效命令。
 - 状态消息时间戳策略：使用 MuJoCo 仿真时间 `d->time`。
 
@@ -94,7 +94,7 @@ MuJoCo 桥接节点模块。
 - bridge 生命周期适合挂在现有 hooks 上。
 - ROS2 spin 与 MuJoCo step 保持同线程，在 MuJoCo step 边界非阻塞处理 ROS 回调。
 - 节点名使用 `mujoco_bridge`，当前不使用 namespace。
-- 状态发布频率暂定 `100 Hz`。
+- 状态发布频率现为每个 MuJoCo step，当前约 `500 Hz`。
 - 命令处理频率为每个 MuJoCo step 处理一次最新有效命令。
 - 状态消息时间戳策略使用 MuJoCo 仿真时间 `d->time`。
 

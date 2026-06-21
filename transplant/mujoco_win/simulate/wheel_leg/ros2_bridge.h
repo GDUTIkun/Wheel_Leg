@@ -9,6 +9,8 @@ void InitializeRos2Bridge(const mjModel* m, const mjData* d);
 void SpinRos2Bridge(const mjModel* m, const mjData* d);
 void ApplyRos2Command(const mjModel* m, mjData* d);
 void PublishRos2State(const mjModel* m, const mjData* d);
+bool HasActiveRosCommandControl(const mjData* d);
+bool StepRosCommandControl(const mjModel* m, mjData* d);
 
 }  // namespace wheel_leg
 

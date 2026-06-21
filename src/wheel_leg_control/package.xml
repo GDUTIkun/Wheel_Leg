@@ -11,6 +11,7 @@
 
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>wheel_leg_bridge</depend>
   <depend>wheel_leg_common</depend>
   <depend>wheel_leg_msgs</depend>

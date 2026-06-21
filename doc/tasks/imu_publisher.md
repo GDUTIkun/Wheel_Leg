@@ -16,7 +16,7 @@ IMU 状态发布模块。
 - `[x]` 确认 MuJoCo 到 ROS2 的坐标系转换约定：当前不做轴重映射，按 `base_link` 机体系直接发布。
 - `[x]` 确认四元数顺序转换策略：MuJoCo `w,x,y,z` 转 ROS `x,y,z,w`。
 - `[x]` 确认 covariance 是否填充：当前 covariance 全 0，表示未知。
-- `[x]` 确认状态发布频率：`100 Hz`。
+- `[x]` 确认状态发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - `[x]` 确认时间戳策略：使用 MuJoCo 仿真时间 `d->time`。
 - `[x]` 从 MuJoCo 读取姿态。
 - `[x]` 从 MuJoCo 读取角速度。
@@ -35,7 +35,7 @@ IMU 状态发布模块。
 - 坐标系约定：当前不做轴重映射，按 `base_link` 机体系直接发布。
 - 四元数顺序：MuJoCo `w,x,y,z` 转 ROS `x,y,z,w`。
 - covariance 策略：当前 covariance 全 0，表示未知。
-- 发布频率：`100 Hz`。
+- 发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - 时间戳策略：使用 MuJoCo 仿真时间 `d->time`。
 
 ## 5. 每个任务的输出
@@ -83,6 +83,6 @@ IMU 状态发布模块。
 - 仿真命令：`timeout -k 2s 12s build/wheel_leg_simulate_ros2/wheel_leg_simulate transplant/mujoco_win/model/scence.xml`。
 - 验证命令：`ros2 topic echo --once /imu`。
 - 观察结果：消息包含 `orientation`、`angular_velocity`、`linear_acceleration`，`header.frame_id` 为 `base_link`，covariance 为全 0。
-- 频率验证：修正仿真时间发布调度后，`ros2 topic hz /imu` 统计约 `100 Hz`。
-- 修正说明：`/imu` 与 `/joint_states` 共用 bridge 发布调度；初始并行频率统计约 `83.3 Hz`，改为 `next_publish_time` 调度后恢复为约 `100 Hz`。
+- 频率验证：当前实现按每个 MuJoCo step 发布，`ros2 topic hz /imu` 统计约 `500 Hz`。
+- 修正说明：`/imu` 与 `/joint_states` 现已移除共享的 `100 Hz` 发布调度，直接随 MuJoCo step 发布。
 - 坐标语义验证：`base_frame` site 直接挂在 `base_body` 上且无额外旋转；`base_accel`、`base_gyro`、`base_quat` 都直接以该 site 为参考。bridge 只做四元数 `w,x,y,z -> x,y,z,w` 重排，不做轴重映射。运行时 `/imu` 样本中 `orientation` 接近单位四元数、`linear_acceleration.z` 接近 `+9.8`，与近直立机体系观测一致。

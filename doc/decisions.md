@@ -25,8 +25,8 @@
 - 日期：2026-06-20
 - 背景：`iter-001` 后续代码实现需要确认 `/joint_states`、`/imu` 的发布节奏，以及 `/joint_command` 在 MuJoCo 仿真周期中的处理边界。
 - 可选方案：状态发布频率与 MuJoCo step 完全一致；固定状态发布频率；使用 ROS 当前时间；使用 MuJoCo 仿真时间。
-- 最终选择：`/joint_states` 和 `/imu` 按 `100 Hz` 发布；`/joint_command` 每个 MuJoCo step 处理一次最新有效命令；状态消息时间戳使用 MuJoCo 仿真时间 `d->time` 转换为 ROS time。
-- 选择理由：`100 Hz` 足够支持当前调试和初步控制接入，不会让 ROS CLI 过度刷屏；命令处理跟随 MuJoCo step 可保持仿真执行边界清晰；状态消息使用仿真时间便于 rosbag、状态估计和回放。
+- 最终选择：`/joint_states`、`/imu` 和 `/robot_state` 都按每个 MuJoCo step 发布；`/joint_command` 每个 MuJoCo step 处理一次最新有效命令；状态消息时间戳使用 MuJoCo 仿真时间 `d->time` 转换为 ROS time。
+- 选择理由：当前 ROS 接管控制需要与 MuJoCo 内侧 legacy 控制保持同一 `0.002 s` 离散步长，避免 `100 Hz` / `500 Hz` 混频导致 controller 的离散 PID、滤波和接管时序失配；状态消息使用仿真时间便于 rosbag、状态估计和回放。
 - 影响范围：MuJoCo 桥接节点模块、关节状态发布模块、IMU 状态发布模块、关节命令订阅模块和后续验证步骤。
 - 后续是否可修改：可修改。若后续控制器需要更高频率或实机部署需要同步真实硬件时钟，应重新确认并更新本文档。
 

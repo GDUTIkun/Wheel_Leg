@@ -15,7 +15,7 @@
 - `[x]` 确认关节发布顺序。
 - `[x]` 确认 `/joint_states` 是否填充 effort：当前不填充 effort。
 - `[x]` 确认时间戳使用仿真时间还是 ROS2 当前时间：使用 MuJoCo 仿真时间 `d->time`。
-- `[x]` 确认状态发布频率：`100 Hz`。
+- `[x]` 确认状态发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - `[x]` 从 MuJoCo 数据中读取关节位置。
 - `[x]` 从 MuJoCo 数据中读取关节速度。
 - `[x]` 组装 `sensor_msgs/msg/JointState`。
@@ -29,7 +29,7 @@
 - 当前仿真时间。
 - 关节命名表：`left_hip`、`left_knee`、`left_wheel`、`right_hip`、`right_knee`、`right_wheel`。
 - 关节顺序约定：按关节命名表顺序发布。
-- 发布频率：`100 Hz`。
+- 发布频率：每个 MuJoCo step，当前约 `500 Hz`。
 - 时间戳策略：使用 MuJoCo 仿真时间 `d->time`。
 
 ## 5. 每个任务的输出
@@ -76,5 +76,5 @@
 - 仿真命令：`timeout -k 2s 12s build/wheel_leg_simulate_ros2/wheel_leg_simulate transplant/mujoco_win/model/scence.xml`。
 - 验证命令：`ros2 topic echo --once /joint_states`。
 - 观察结果：消息包含 6 个关节名称，`position` 和 `velocity` 均为 6 项，`effort` 为空，符合当前策略。
-- 频率验证：修正仿真时间发布调度后，`ros2 topic hz /joint_states` 统计约 `100 Hz`。
-- 修正说明：初始实现用浮点差值判断 `0.01 s` 周期，在 `0.002 s` MuJoCo timestep 下可能每 6 个 step 发布一次，实测约 `83.3 Hz`；改为 `next_publish_time` 调度后恢复为约 `100 Hz`。
+- 频率验证：当前实现按每个 MuJoCo step 发布，`ros2 topic hz /joint_states` 统计约 `500 Hz`。
+- 修正说明：旧实现曾通过 `0.01 s` 周期调度把 `/joint_states` 限在 `100 Hz`；现已移除该限流，直接随 `0.002 s` MuJoCo timestep 发布。
