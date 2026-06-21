@@ -43,7 +43,15 @@ std::optional<wheel_leg_common::ControlCommand> ControllerOrchestrator::Step(
   return runtime_.Step(state_time_sec, dt, control_state).command;
 }
 
-void ControllerOrchestrator::ResetForState(
+void ControllerOrchestrator::SetTargets(const ControlTargets& targets) {
+  runtime_.set_targets(targets);
+}
+
+const ControlTargets& ControllerOrchestrator::targets() const {
+  return runtime_.targets();
+}
+
+void ControllerOrchestrator::ResetControllersForState(
     const StandControlState& control_state) {
   const auto& targets = runtime_.targets();
   leglen_pid_l_.Reset(

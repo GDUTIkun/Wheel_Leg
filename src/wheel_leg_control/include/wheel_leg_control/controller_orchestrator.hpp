@@ -6,6 +6,7 @@
 #include <wheel_leg_common/types.hpp>
 
 #include "wheel_leg_control/legacy_algorithms.hpp"
+#include "wheel_leg_control/stand_control_types.hpp"
 #include "wheel_leg_control/stand_control_runtime.hpp"
 
 namespace wheel_leg_control {
@@ -18,7 +19,9 @@ class ControllerOrchestrator {
       double state_time_sec,
       double dt,
       const StandControlState& control_state);
-  void ResetForState(const StandControlState& control_state);
+  void SetTargets(const ControlTargets& targets);
+  const ControlTargets& targets() const;
+  void ResetControllersForState(const StandControlState& control_state);
 
  private:
   LegacyPidAlgorithm leglen_pid_l_;

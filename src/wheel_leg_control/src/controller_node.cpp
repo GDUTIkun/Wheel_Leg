@@ -1,18 +1,25 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <fstream>
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 
+#include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
 #include "wheel_leg_bridge/message_conversions.hpp"
 #include "wheel_leg_control/controller_orchestrator.hpp"
+#include "wheel_leg_control/stand_runtime_defaults.hpp"
 #include "wheel_leg_control/state_message_conversions.hpp"
+#include "wheel_leg_msgs/msg/body_command.hpp"
+#include "wheel_leg_msgs/msg/rc_status.hpp"
 
 namespace wheel_leg_control {
 namespace {
@@ -23,6 +30,10 @@ constexpr std::size_t kWarmupSamplesRequired = 3;
 constexpr std::size_t kDtDebugSamplesToLog = 5;
 constexpr std::size_t kDefaultTraceCapacity = 300;
 constexpr const char* kDefaultTracePath = "/tmp/wheel_leg_takeover_trace.csv";
+
+constexpr const char* kModeStand = "stand";
+constexpr const char* kModeVelocity = "velocity";
+constexpr const char* kModeDisabled = "disabled";
 
 double ToSec(const builtin_interfaces::msg::Time& stamp) {
   return static_cast<double>(stamp.sec) +
@@ -48,12 +59,70 @@ struct TraceSample {
   wheel_leg_common::ControlCommand clamped_command;
 };
 
+enum class Mode {
+  kStand,
+  kVelocity,
+  kDisabled,
+};
+
+struct ArbitrationResult {
+  Mode mode = Mode::kStand;
+  ControlTargets targets = DefaultStandControlTargets();
+  bool hold_output = false;
+  std::string reason;
+};
+
+std::string ModeToString(Mode mode) {
+  switch (mode) {
+    case Mode::kStand:
+      return kModeStand;
+    case Mode::kVelocity:
+      return kModeVelocity;
+    case Mode::kDisabled:
+      return kModeDisabled;
+  }
+  return kModeStand;
+}
+
+Mode ModeFromString(const std::string& mode_text) {
+  if (mode_text == kModeVelocity) {
+    return Mode::kVelocity;
+  }
+  if (mode_text == kModeDisabled) {
+    return Mode::kDisabled;
+  }
+  return Mode::kStand;
+}
+
+bool IsOperationalModeReason(const std::string& reason) {
+  return reason == "mode_stand" || reason == "mode_velocity" ||
+         reason == "mode_disabled";
+}
+
+wheel_leg_common::ControlCommand BuildZeroCommand(double state_time_sec) {
+  wheel_leg_common::ControlCommand command;
+  command.stamp.sec = static_cast<std::int32_t>(state_time_sec);
+  command.stamp.nanosec = static_cast<std::uint32_t>(
+      (state_time_sec - static_cast<double>(command.stamp.sec)) *
+      1000000000.0);
+  command.joint_efforts = {
+      {"right_hip", 0.0},
+      {"right_knee", 0.0},
+      {"left_hip", 0.0},
+      {"left_knee", 0.0},
+      {"right_wheel", 0.0},
+      {"left_wheel", 0.0},
+  };
+  return command;
+}
+
 }  // namespace
 
 class ControllerNode : public rclcpp::Node {
  public:
   ControllerNode()
-      : rclcpp::Node("wheel_leg_controller") {
+      : rclcpp::Node("wheel_leg_controller"),
+        default_targets_(DefaultStandControlTargets()) {
     publish_control_command_ =
         declare_parameter<bool>("publish_control_command", true);
     hip_effort_limit_ =
@@ -68,16 +137,62 @@ class ControllerNode : public rclcpp::Node {
         declare_parameter<int>("trace_capacity", kDefaultTraceCapacity);
     trace_output_path_ =
         declare_parameter<std::string>("trace_output_path", kDefaultTracePath);
+    command_timeout_sec_ =
+        declare_parameter<double>("command_timeout_sec", 0.2);
+    target_velocity_scale_ =
+        declare_parameter<double>("target_velocity_scale", 0.6);
+    target_yaw_rate_scale_ =
+        declare_parameter<double>("target_yaw_rate_scale", 1.2);
+    yaw_rate_assist_scale_ =
+        declare_parameter<double>("yaw_rate_assist_scale", 1.0);
+    body_height_offset_scale_ =
+        declare_parameter<double>("body_height_offset_scale", 0.05);
+    target_leg_length_min_ =
+        declare_parameter<double>("target_leg_length_min", 0.22);
+    target_leg_length_max_ =
+        declare_parameter<double>("target_leg_length_max", 0.30);
+    disabled_stops_publishing_ =
+        declare_parameter<bool>("disabled_stops_publishing", true);
     declare_parameter<double>("publish_rate_hz", 500.0);
     RCLCPP_WARN(
         get_logger(),
         "Parameter publish_rate_hz is ignored; /wheel_leg_controller now runs one control step per new /robot_state sample.");
+
+    latest_control_mode_ = kModeStand;
 
     control_state_sub_ =
         create_subscription<wheel_leg_msgs::msg::StandControlState>(
             "/robot_state", rclcpp::SystemDefaultsQoS(),
             [this](const wheel_leg_msgs::msg::StandControlState::SharedPtr msg) {
               OnControlState(*msg);
+            });
+    cmd_vel_sub_ =
+        create_subscription<geometry_msgs::msg::Twist>(
+            "/cmd_vel", rclcpp::SystemDefaultsQoS(),
+            [this](const geometry_msgs::msg::Twist::SharedPtr msg) {
+              latest_cmd_vel_ = *msg;
+              last_cmd_vel_time_sec_ = now().seconds();
+            });
+    control_mode_sub_ =
+        create_subscription<std_msgs::msg::String>(
+            "/control_mode", rclcpp::SystemDefaultsQoS(),
+            [this](const std_msgs::msg::String::SharedPtr msg) {
+              latest_control_mode_ = msg->data;
+              last_control_mode_time_sec_ = now().seconds();
+            });
+    body_cmd_sub_ =
+        create_subscription<wheel_leg_msgs::msg::BodyCommand>(
+            "/body_cmd", rclcpp::SystemDefaultsQoS(),
+            [this](const wheel_leg_msgs::msg::BodyCommand::SharedPtr msg) {
+              latest_body_cmd_ = *msg;
+              last_body_cmd_time_sec_ = now().seconds();
+            });
+    rc_status_sub_ =
+        create_subscription<wheel_leg_msgs::msg::RcStatus>(
+            "/rc/status", rclcpp::SystemDefaultsQoS(),
+            [this](const wheel_leg_msgs::msg::RcStatus::SharedPtr msg) {
+              latest_rc_status_ = *msg;
+              last_rc_status_time_sec_ = now().seconds();
             });
     joint_command_pub_ =
         create_publisher<wheel_leg_msgs::msg::JointCommand>(
@@ -137,8 +252,7 @@ class ControllerNode : public rclcpp::Node {
       return;
     }
 
-    const double dt =
-        std::clamp(raw_dt, kMinAcceptedDtSec, kMaxAcceptedDtSec);
+    const double dt = std::clamp(raw_dt, kMinAcceptedDtSec, kMaxAcceptedDtSec);
     if (dt_debug_log_count_ < kDtDebugSamplesToLog) {
       ++dt_debug_log_count_;
       RCLCPP_INFO(
@@ -151,12 +265,30 @@ class ControllerNode : public rclcpp::Node {
     if (warmup_sample_count_ < kWarmupSamplesRequired) {
       ++warmup_sample_count_;
       if (warmup_sample_count_ == kWarmupSamplesRequired) {
-        orchestrator_.ResetForState(control_state);
+        orchestrator_.SetTargets(default_targets_);
+        orchestrator_.ResetControllersForState(control_state);
       }
       return;
     }
 
+    const ArbitrationResult arbitration =
+        BuildArbitrationResult(now().seconds());
+    ApplyArbitration(arbitration, control_state, state_time_sec);
+
     if (!publish_control_command_) {
+      return;
+    }
+
+    if (last_effective_mode_.has_value() &&
+        *last_effective_mode_ == Mode::kDisabled &&
+        !disabled_stops_publishing_) {
+      const auto zero_command = BuildZeroCommand(state_time_sec);
+      joint_command_pub_->publish(
+          wheel_leg_bridge::ToRosJointCommand(zero_command));
+      return;
+    }
+
+    if (arbitration.hold_output) {
       return;
     }
 
@@ -168,9 +300,138 @@ class ControllerNode : public rclcpp::Node {
 
     auto limited_command = *command;
     ClampCommand(&limited_command);
-    RecordTraceSample(state_time_sec, dt, control_state, *command, limited_command);
+    RecordTraceSample(
+        state_time_sec, dt, control_state, *command, limited_command);
     joint_command_pub_->publish(
         wheel_leg_bridge::ToRosJointCommand(limited_command));
+  }
+
+  ArbitrationResult BuildArbitrationResult(double now_sec) const {
+    ArbitrationResult result;
+    result.mode = ModeFromString(latest_control_mode_);
+    result.targets = default_targets_;
+
+    if (IsCommandTimedOut(last_control_mode_time_sec_, now_sec)) {
+      result.reason = "control_mode_timeout";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (IsCommandTimedOut(last_cmd_vel_time_sec_, now_sec)) {
+      result.reason = "cmd_vel_timeout";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (IsCommandTimedOut(last_body_cmd_time_sec_, now_sec)) {
+      result.reason = "body_cmd_timeout";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (!latest_rc_status_.has_value()) {
+      result.reason = "rc_status_missing";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (IsCommandTimedOut(last_rc_status_time_sec_, now_sec)) {
+      result.reason = "rc_status_timeout";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (!latest_rc_status_->serial_online) {
+      result.reason = "rc_serial_offline";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (latest_rc_status_->frame_timeout) {
+      result.reason = "rc_frame_timeout";
+      result.mode = Mode::kStand;
+      return result;
+    }
+    if (latest_rc_status_->failsafe) {
+      result.reason = "rc_failsafe";
+      result.mode = Mode::kStand;
+      return result;
+    }
+
+    result.targets.target_leg_length = std::clamp(
+        default_targets_.target_leg_length +
+            latest_body_cmd_.body_height_offset * body_height_offset_scale_,
+        target_leg_length_min_, target_leg_length_max_);
+
+    switch (result.mode) {
+      case Mode::kStand:
+        result.reason = "mode_stand";
+        break;
+      case Mode::kVelocity:
+        result.targets.target_velocity =
+            latest_cmd_vel_.linear.x * target_velocity_scale_;
+        result.targets.target_yaw_rate =
+            latest_cmd_vel_.angular.z * target_yaw_rate_scale_ +
+            latest_body_cmd_.yaw_rate_assist * yaw_rate_assist_scale_;
+        result.reason = "mode_velocity";
+        break;
+      case Mode::kDisabled:
+        result.reason = "mode_disabled";
+        result.hold_output = disabled_stops_publishing_;
+        break;
+    }
+
+    return result;
+  }
+
+  bool IsCommandTimedOut(double last_update_sec, double now_sec) const {
+    if (last_update_sec < 0.0) {
+      return true;
+    }
+    return now_sec - last_update_sec > command_timeout_sec_;
+  }
+
+  void ApplyArbitration(const ArbitrationResult& arbitration,
+                        const StandControlState& control_state,
+                        double state_time_sec) {
+    orchestrator_.SetTargets(arbitration.targets);
+
+    const bool mode_changed = !last_effective_mode_.has_value() ||
+                              arbitration.mode != *last_effective_mode_;
+    const bool reason_changed =
+        !last_arbitration_reason_.has_value() ||
+        arbitration.reason != *last_arbitration_reason_;
+    const bool fallback_active = !IsOperationalModeReason(arbitration.reason);
+    const bool fallback_changed = fallback_active_ != fallback_active;
+
+    if (mode_changed || reason_changed) {
+      orchestrator_.ResetControllersForState(control_state);
+    }
+
+    if (fallback_changed || (fallback_active && reason_changed)) {
+      if (fallback_active) {
+        RCLCPP_WARN(
+            get_logger(),
+            "Controller fallback active at %.3f s: mode=%s reason=%s",
+            state_time_sec, ModeToString(arbitration.mode).c_str(),
+            arbitration.reason.c_str());
+      } else {
+        RCLCPP_INFO(
+            get_logger(),
+            "Controller fallback cleared at %.3f s; mode=%s reason=%s",
+            state_time_sec, ModeToString(arbitration.mode).c_str(),
+            arbitration.reason.c_str());
+      }
+    }
+
+    if (mode_changed) {
+      RCLCPP_INFO(
+          get_logger(),
+          "Controller mode transition at %.3f s: %s -> %s (%s)",
+          state_time_sec,
+          last_effective_mode_.has_value()
+              ? ModeToString(*last_effective_mode_).c_str()
+              : "unset",
+          ModeToString(arbitration.mode).c_str(), arbitration.reason.c_str());
+    }
+
+    fallback_active_ = fallback_active;
+    last_effective_mode_ = arbitration.mode;
+    last_arbitration_reason_ = arbitration.reason;
   }
 
   void ClampCommand(wheel_leg_common::ControlCommand* command) {
@@ -293,6 +554,10 @@ class ControllerNode : public rclcpp::Node {
   bool invalid_dt_warning_logged_ = false;
   bool out_of_range_dt_warning_logged_ = false;
   bool non_increasing_stamp_warning_logged_ = false;
+  bool trace_capture_enabled_ = true;
+  bool trace_dump_written_ = false;
+  bool disabled_stops_publishing_ = true;
+  bool fallback_active_ = false;
   std::size_t warmup_sample_count_ = 0;
   std::size_t dt_debug_log_count_ = 0;
   double last_processed_state_time_sec_ =
@@ -300,14 +565,36 @@ class ControllerNode : public rclcpp::Node {
   double hip_effort_limit_ = 50.0;
   double knee_effort_limit_ = 50.0;
   double wheel_effort_limit_ = 20.0;
-  bool trace_capture_enabled_ = true;
-  bool trace_dump_written_ = false;
+  double command_timeout_sec_ = 0.0;
+  double target_velocity_scale_ = 0.0;
+  double target_yaw_rate_scale_ = 0.0;
+  double yaw_rate_assist_scale_ = 0.0;
+  double body_height_offset_scale_ = 0.0;
+  double target_leg_length_min_ = 0.0;
+  double target_leg_length_max_ = 0.0;
+  double last_cmd_vel_time_sec_ = -1.0;
+  double last_control_mode_time_sec_ = -1.0;
+  double last_body_cmd_time_sec_ = -1.0;
+  double last_rc_status_time_sec_ = -1.0;
   int trace_capacity_ = static_cast<int>(kDefaultTraceCapacity);
   std::string trace_output_path_ = kDefaultTracePath;
+  std::string latest_control_mode_;
+  std::optional<Mode> last_effective_mode_;
+  std::optional<std::string> last_arbitration_reason_;
+  std::optional<wheel_leg_msgs::msg::RcStatus> latest_rc_status_;
+  ControlTargets default_targets_;
+  geometry_msgs::msg::Twist latest_cmd_vel_;
+  wheel_leg_msgs::msg::BodyCommand latest_body_cmd_;
   std::deque<TraceSample> trace_samples_;
   ControllerOrchestrator orchestrator_;
   rclcpp::Subscription<wheel_leg_msgs::msg::StandControlState>::SharedPtr
       control_state_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr control_mode_sub_;
+  rclcpp::Subscription<wheel_leg_msgs::msg::BodyCommand>::SharedPtr
+      body_cmd_sub_;
+  rclcpp::Subscription<wheel_leg_msgs::msg::RcStatus>::SharedPtr
+      rc_status_sub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::JointCommand>::SharedPtr
       joint_command_pub_;
 };
