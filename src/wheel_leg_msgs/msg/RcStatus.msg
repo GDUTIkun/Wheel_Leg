@@ -1,0 +1,11 @@
+std_msgs/Header header
+builtin_interfaces/Time last_valid_frame_time
+bool serial_online
+bool receiver_online
+bool frame_timeout
+bool failsafe
+uint32 valid_frame_count
+uint32 checksum_error_count
+uint32 frame_sync_loss_count
+uint32 serial_read_error_count
+uint32 serial_open_failure_count

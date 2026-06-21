@@ -46,4 +46,6 @@
 
 ## 当前状态
 
-- `[~]` 文档设计完成，待进入代码实现。
+- `[v]` 已完成代码实现与实机验证。
+- 已在 Raspberry Pi 上确认 `/dev/ttyAMA3` 可稳定接收 `FlySky FS-iA6B` 的 `iBUS` 帧。
+- 已验证 `/rc/channels_raw` 与 `/rc/status` 可用于现场排障和通道确认。

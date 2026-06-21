@@ -1,0 +1,3 @@
+std_msgs/Header header
+float64 body_height_offset
+float64 yaw_rate_assist

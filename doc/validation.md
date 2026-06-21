@@ -28,6 +28,8 @@
 | `wheel_leg_msgs/msg/JointCommand` 消息包 | 构建 | 已通过 | `colcon build --packages-select wheel_leg_msgs` 成功，`colcon list` 正确识别为 `ros.ament_cmake` |
 | 现有 MuJoCo 基础站立能力不被破坏 | 仿真 | 已通过 | headless 无命令运行 `24 s` 无不稳定告警，中途 topic 仍持续可读；GUI 观感验证仍可补充 |
 | `iter-002` 过渡编排最小启动验证 | 仿真 | 已通过 | 过渡编排切到正式算法接口后，MuJoCo 仍可加载模型并完成 `OnModelLoaded` 与 ROS2 bridge 初始化 |
+| `rc_ibus_node` 串口接收与 `iBUS` 解包 | 实机 | 已通过 | `/dev/ttyAMA3` 可稳定接收合法 `iBUS` 帧，`checksum_errors=0`，`/rc/channels_raw` 可持续发布 |
+| 遥控器统一命令映射 | 实机 | 已通过 | 已确认真实通道布局，`/cmd_vel`、`/control_mode`、`/body_cmd` 与急停映射符合预期 |
 | STM32 真机通信 | 实机 | 不适用 | 不属于 `iter-001` |
 | 遥控器输入 | 实机 / 仿真 | 不适用 | 不属于 `iter-001` |
 
@@ -258,6 +260,45 @@ MuJoCo actuator
   5. 执行 `ros2 topic pub --once /joint_command wheel_leg_msgs/msg/JointCommand "{joint_names: ['left_wheel'], efforts: [1000.0]}"`
 - 观察结果：
   - bridge 日志输出 `Clamped /joint_command for left_wheel from 1000.000 to 400.000`。
+
+### VAL-010: `rc_ibus_node` 串口接收与 `iBUS` 解包验证
+
+- 日期：2026-06-22
+- 对应迭代：`iter-003`
+- 测试环境：实机
+- 测试目标：验证 Raspberry Pi 上的 `rc_ibus_node` 能通过 `/dev/ttyAMA3` 稳定接收并解包 `FlySky FS-iA6B` 的 `iBUS` 数据
+- 测试步骤：
+  1. 执行 `sudo bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/tan/Wheel_Leg/install/setup.bash && ros2 run wheel_leg_rc rc_ibus_node'`
+  2. 观察节点日志中的 `valid_frames`、`checksum_errors` 与 `sync_loss`
+  3. 执行 `sudo bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/tan/Wheel_Leg/install/setup.bash && ros2 topic echo --once /rc/channels_raw'`
+- 观察结果：
+  - 节点成功打开 `/dev/ttyAMA3`，日志持续输出 `iBUS online`
+  - 日志样例显示 `valid_frames=3752 checksum_errors=0 sync_loss=26`
+  - `/rc/channels_raw` 可读取到合法 `iBUS` 通道数据，例如 `[1500, 1498, 1000, 1500, 1000, 1000, ...]`
+- 是否通过：已通过
+- 问题现象：普通用户直接打开 `/dev/ttyAMA3` 会遇到 `Permission denied`，当前实机验证通过 `sudo` 执行
+- 可能原因：当前用户尚未加入 `dialout` 组
+- 下一步建议：将运行用户加入 `dialout` 后补一次普通用户运行回归，并继续做控制链联调
+
+### VAL-011: 遥控器统一命令映射验证
+
+- 日期：2026-06-22
+- 对应迭代：`iter-003`
+- 测试环境：实机
+- 测试目标：验证真实遥控器通道与 `/cmd_vel`、`/control_mode`、`/body_cmd` 的默认映射是否正确
+- 测试步骤：
+  1. 在 `rc_ibus_node` 在线状态下运行 `tools/rc_channel_watch.py`，逐一拨动摇杆和开关
+  2. 记录每个物理输入对应的 `CH1~CH6` 变化
+  3. 通过 `ros2 topic echo /control_mode` 与 `ros2 topic echo /cmd_vel` 验证模式切换、急停和主速度命令
+  4. 通过 `ros2 topic echo /body_cmd` 验证机身附加命令
+- 观察结果：
+  - 已确认通道布局：`CH2` 右摇杆上下、`CH1` 右摇杆左右、`CH3` 左摇杆上下、`CH4` 左摇杆左右、`CH5` 开关、`CH6` 三段开关
+  - `CH5` 可在 `disabled` 与 `stand` 之间切换，急停链路正常
+  - `CH6` 可在 `stand` 与 `velocity` 之间切换
+  - `CH2` 上推时 `/cmd_vel.linear.x = +1`，`CH4` 左打时 `/cmd_vel.angular.z = +1`
+  - `CH3` 与 `CH1` 对应的 `/body_cmd.body_height_offset`、`/body_cmd.yaw_rate_assist` 可正常变化
+- 是否通过：已通过
+- 下一步建议：进入统一命令到控制器/仿真链路的联调，验证 `velocity` 模式下的整机运动响应与 failsafe 退回行为
   - bridge 日志输出 `Applied /joint_command to 1 actuator(s)`。
 - 是否通过：已通过
 - 问题现象：命令被限幅到 `400.0` 后，MuJoCo 输出 `Nan, Inf or huge value in QACC` unstable warning。

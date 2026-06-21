@@ -51,8 +51,8 @@
 
 | 模块任务 | 文件 | 当前状态 | 说明 |
 | --- | --- | --- | --- |
-| `rc_ibus_node` 设计任务 | `doc/tasks/rc_ibus_node.md` | `[~] 设计已冻结` | 已固定串口、前置接收测试、协议解包、原始通道发布和状态诊断边界 |
-| 遥控命令映射任务 | `doc/tasks/rc_command_mapping.md` | `[~] 设计已冻结` | 已固定用户配合映射流程、`/cmd_vel`、`/control_mode`、`/body_cmd` 的映射职责与 failsafe |
+| `rc_ibus_node` 设计任务 | `doc/tasks/rc_ibus_node.md` | `[v] 已通过验证` | 已完成 `/dev/ttyAMA3` 实机 `iBUS` 解包、原始通道发布与状态诊断验证 |
+| 遥控命令映射任务 | `doc/tasks/rc_command_mapping.md` | `[v] 已通过验证` | 已完成真实遥控器通道确认，`/cmd_vel`、`/control_mode`、`/body_cmd` 与 failsafe 映射已实机验证 |
 | 树莓派串口联通性测试节点 | `src/wheel_leg_rc/src/rc_serial_probe_node.cpp` | `[x] 代码已完成` | 已新增 ROS2 串口探测节点，先验证 `/dev/ttyAMA3` 是否收到持续字节流，不依赖 `iBUS` 解包 |
 | 第二阶段详细设计 | `doc/detail.md` | `[~] 文档已更新` | 已新增 `iter-003` 的 `rc_ibus_node` 详细设计章节 |
 | 总体架构更新 | `doc/architecture.md` | `[~] 文档已更新` | 已补充 `rc_ibus_node` 的长期定位和 ROS2 接口边界 |
@@ -80,6 +80,6 @@
 
 ## 7. 当前阻塞或待确认问题
 
-- 前置串口联通性测试必须先通过，否则不得继续进入 `iBUS` 帧解析和遥控映射。
-- 遥控映射确认阶段需要用户现场配合拨动摇杆和开关。
-- 后续进入代码实现时，需要用真实遥控器实测最终通道编号分配和各通道端点。
+- 当前 `rc_ibus_node` 默认映射已按本次遥控器布局固化；若后续更换发射机模型或重新混控，需要重新做一次通道确认。
+- 当前节点实机验证仍依赖 `sudo` 访问 `/dev/ttyAMA3`；后续建议将运行用户加入 `dialout` 后再做一次普通用户路径回归。
+- 下一阶段应把统一命令正式接入仿真/控制链，验证 `velocity` 与 `stand` 模式下的整机行为。

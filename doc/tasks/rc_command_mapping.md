@@ -44,4 +44,6 @@
 
 ## 当前状态
 
-- `[~]` 文档设计完成，待进入代码实现。
+- `[v]` 已完成代码实现与实机验证。
+- 已确认真实遥控器通道布局：`CH2` 右摇杆上下、`CH1` 右摇杆左右、`CH3` 左摇杆上下、`CH4` 左摇杆左右、`CH5` 开关、`CH6` 三段开关。
+- 已验证 `CH2 -> /cmd_vel.linear.x`、`CH4 -> /cmd_vel.angular.z`、`CH5 -> disabled/stand`、`CH6 -> stand/velocity` 映射符合预期。
