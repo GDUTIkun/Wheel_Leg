@@ -283,11 +283,13 @@ class Ros2Bridge {
       logged_robot_state_sample_ = true;
       RCLCPP_INFO(
           node_->get_logger(),
-          "Robot state sample: body=(dist=%.6f, vel=%.6f, pitch=%.6f, pitch_rate=%.6f, yaw_rate=%.6f), "
+          "Robot state sample: body=(dist=%.6f, vel=%.6f, roll=%.6f, roll_rate=%.6f, pitch=%.6f, pitch_rate=%.6f, yaw_rate=%.6f), "
           "left=(hip=%.6f, calf=%.6f, len=%.6f, phi=%.6f, phi_rate=%.6f), "
           "right=(hip=%.6f, calf=%.6f, len=%.6f, phi=%.6f, phi_rate=%.6f)",
           control_state.body.distance,
           control_state.body.velocity,
+          control_state.body.roll,
+          control_state.body.roll_rate,
           control_state.body.pitch,
           control_state.body.pitch_rate,
           control_state.body.yaw_rate,
@@ -352,6 +354,10 @@ class Ros2Bridge {
                        round_tripped.body.distance);
     append_if_mismatch("body.velocity", expected.body.velocity,
                        round_tripped.body.velocity);
+    append_if_mismatch("body.roll", expected.body.roll,
+                       round_tripped.body.roll);
+    append_if_mismatch("body.roll_rate", expected.body.roll_rate,
+                       round_tripped.body.roll_rate);
     append_if_mismatch("body.pitch", expected.body.pitch,
                        round_tripped.body.pitch);
     append_if_mismatch("body.pitch_rate", expected.body.pitch_rate,

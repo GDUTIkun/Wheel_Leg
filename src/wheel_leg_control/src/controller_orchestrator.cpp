@@ -7,6 +7,7 @@ ControllerOrchestrator::ControllerOrchestrator()
       leglen_pid_r_(DefaultStandLegacyPidDefaults().leg_length),
       steer_v_pid_(DefaultStandLegacyPidDefaults().steer_velocity),
       anti_crash_pid_(DefaultStandLegacyPidDefaults().anti_crash),
+      roll_balance_pid_(DefaultStandLegacyPidDefaults().roll_balance),
       runtime_(
           StandControlCallbacks{
               .leglen_pid_l =
@@ -25,6 +26,10 @@ ControllerOrchestrator::ControllerOrchestrator()
                   [this](const PidStepInput& input) {
                     return anti_crash_pid_.Compute(input);
                   },
+              .roll_balance_pid =
+                  [this](const PidStepInput& input) {
+                    return roll_balance_pid_.Compute(input);
+                  },
               .lqr_algorithm =
                   [this](const LqrStepInput& input) {
                     return lqr_algorithm_.Compute(input);
@@ -42,17 +47,22 @@ void ControllerOrchestrator::ConfigurePidDefaults(
   leglen_pid_r_ = LegacyPidAlgorithm(defaults.leg_length);
   steer_v_pid_ = LegacyPidAlgorithm(defaults.steer_velocity);
   anti_crash_pid_ = LegacyPidAlgorithm(defaults.anti_crash);
+  roll_balance_pid_ = LegacyPidAlgorithm(defaults.roll_balance);
 }
 
-std::optional<wheel_leg_common::ControlCommand> ControllerOrchestrator::Step(
+std::optional<ControlStepOutputs> ControllerOrchestrator::Step(
     double state_time_sec,
     double dt,
     const StandControlState& control_state) {
-  return runtime_.Step(state_time_sec, dt, control_state).command;
+  return runtime_.Step(state_time_sec, dt, control_state);
 }
 
 void ControllerOrchestrator::SetTargets(const ControlTargets& targets) {
   runtime_.set_targets(targets);
+}
+
+void ControllerOrchestrator::SetTurnHipFeedforwardScale(double scale) {
+  runtime_.set_turn_hip_feedforward_scale(scale);
 }
 
 const ControlTargets& ControllerOrchestrator::targets() const {
@@ -70,6 +80,7 @@ void ControllerOrchestrator::ResetControllersForState(
       control_state.body.yaw_rate, targets.target_yaw_rate);
   anti_crash_pid_.Reset(
       control_state.left_leg.phi - control_state.right_leg.phi, 0.0);
+  roll_balance_pid_.Reset(control_state.body.roll, 0.0);
 }
 
 }  // namespace wheel_leg_control

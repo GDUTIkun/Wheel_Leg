@@ -169,6 +169,8 @@ std::optional<StandControlState> RosControlStateEstimator::Estimate(
   StandControlState control_state;
   control_state.body.distance = base_forward_distance_;
   control_state.body.velocity = base_forward_velocity;
+  control_state.body.roll = euler[0];
+  control_state.body.roll_rate = snapshot.imu.angular_velocity.x;
   control_state.body.pitch = euler[1];
   control_state.body.pitch_rate = snapshot.imu.angular_velocity.y;
   control_state.body.yaw_rate = snapshot.imu.angular_velocity.z;

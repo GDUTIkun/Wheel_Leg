@@ -47,3 +47,16 @@
 - `[v]` 已完成代码实现与实机验证。
 - 已确认真实遥控器通道布局：`CH2` 右摇杆上下、`CH1` 右摇杆左右、`CH3` 左摇杆上下、`CH4` 左摇杆左右、`CH5` 开关、`CH6` 三段开关。
 - 已验证 `CH2 -> /cmd_vel.linear.x`、`CH4 -> /cmd_vel.angular.z`、`CH5 -> disabled/stand`、`CH6 -> stand/velocity` 映射符合预期。
+- `CH1` 右摇杆左右仍发布到 `/body_cmd.yaw_rate_assist`，但控制器默认 `yaw_rate_assist_scale = 0.0`，因此默认不再叠加到转向。
+
+当前冻结默认映射：
+
+```text
+- linear_x: CH2, scale=1.0, deadzone=0.05
+- angular_z: CH4, scale=1.0, reverse=true, deadzone=0.05
+- body_height: CH3, scale=1.0, deadzone=0.05
+- yaw_rate_assist: CH1, scale=1.0, deadzone=0.05
+- body_height_scale=0.15
+- rc yaw_rate_assist_scale=1.0
+- controller yaw_rate_assist_scale=0.0
+```

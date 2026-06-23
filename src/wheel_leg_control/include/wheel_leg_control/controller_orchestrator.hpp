@@ -16,11 +16,12 @@ class ControllerOrchestrator {
   ControllerOrchestrator();
   void ConfigurePidDefaults(const StandLegacyPidDefaults& defaults);
 
-  std::optional<wheel_leg_common::ControlCommand> Step(
+  std::optional<ControlStepOutputs> Step(
       double state_time_sec,
       double dt,
       const StandControlState& control_state);
   void SetTargets(const ControlTargets& targets);
+  void SetTurnHipFeedforwardScale(double scale);
   const ControlTargets& targets() const;
   void ResetControllersForState(const StandControlState& control_state);
 
@@ -29,6 +30,7 @@ class ControllerOrchestrator {
   LegacyPidAlgorithm leglen_pid_r_;
   LegacyPidAlgorithm steer_v_pid_;
   LegacyPidAlgorithm anti_crash_pid_;
+  LegacyPidAlgorithm roll_balance_pid_;
   LegacyLqrAlgorithm lqr_algorithm_;
   LegacyVmcAlgorithm vmc_algorithm_;
   StandControlRuntime runtime_;

@@ -17,6 +17,8 @@ struct ControlTargets {
 struct BodyControlState {
   double distance = 0.0;
   double velocity = 0.0;
+  double roll = 0.0;
+  double roll_rate = 0.0;
   double pitch = 0.0;
   double pitch_rate = 0.0;
   double yaw_rate = 0.0;
@@ -46,6 +48,7 @@ struct ControlStepOutputs {
   double right_lqr_hip_torque = 0.0;
   double steer_output = 0.0;
   double anti_crash_output = 0.0;
+  double roll_balance_output = 0.0;
   double swerving_speed_ff = 0.0;
 };
 

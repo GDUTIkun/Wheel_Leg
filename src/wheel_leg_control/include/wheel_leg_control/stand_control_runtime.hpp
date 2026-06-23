@@ -12,6 +12,7 @@ struct StandControlCallbacks {
   FunctionalPidAdapter::Function leglen_pid_r;
   FunctionalPidAdapter::Function steer_v_pid;
   FunctionalPidAdapter::Function anti_crash_pid;
+  FunctionalPidAdapter::Function roll_balance_pid;
   FunctionalLqrAdapter::Function lqr_algorithm;
   FunctionalVmcAdapter::Function vmc_algorithm;
 };
@@ -20,7 +21,8 @@ class StandControlRuntime {
  public:
   explicit StandControlRuntime(
       StandControlCallbacks callbacks,
-      ControlTargets targets = DefaultStandControlTargets());
+      ControlTargets targets = DefaultStandControlTargets(),
+      double turn_hip_feedforward_scale = DefaultTurnHipFeedforwardScale());
 
   ControlStepOutputs Step(
       double sim_time,
@@ -29,13 +31,21 @@ class StandControlRuntime {
 
   const ControlTargets& targets() const { return targets_; }
   void set_targets(const ControlTargets& targets) { targets_ = targets; }
+  double turn_hip_feedforward_scale() const {
+    return turn_hip_feedforward_scale_;
+  }
+  void set_turn_hip_feedforward_scale(double scale) {
+    turn_hip_feedforward_scale_ = scale;
+  }
 
  private:
   ControlTargets targets_;
+  double turn_hip_feedforward_scale_ = DefaultTurnHipFeedforwardScale();
   FunctionalPidAdapter leglen_pid_l_;
   FunctionalPidAdapter leglen_pid_r_;
   FunctionalPidAdapter steer_v_pid_;
   FunctionalPidAdapter anti_crash_pid_;
+  FunctionalPidAdapter roll_balance_pid_;
   FunctionalLqrAdapter lqr_algorithm_;
   FunctionalVmcAdapter vmc_algorithm_;
   ControlAlgorithmSet algorithms_;

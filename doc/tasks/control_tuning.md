@@ -21,8 +21,8 @@
 
 ## 4. 当前重点问题
 
-- `[ ]` 速度拉满后不能持续向前跑的问题定位与收敛
-- `[ ]` 站立平衡点偏置定位与校准
+- `[x]` 速度参考纯积分链路验证正常
+- `[~]` 遥控输入滤波参数观察与调整
 - `[ ]` 速度目标幅值调大
 - `[ ]` 转向响应降缓
 - `[ ]` 高度调节范围扩大
@@ -39,21 +39,33 @@
 - `target_leg_length_max`
 - `velocity_ref_lpf_rc`
 - `velocity_ref_slew_rate`
+- `yaw_rate_ref_lpf_rc`
+- `yaw_rate_ref_slew_rate`
+- `leg_length_ref_lpf_rc`
+- `turn_hip_feedforward_scale`
 - `velocity_snap_threshold`
 - `velocity_zero_hold_threshold`
 - `target_phi_deg`
 - `target_pitch`
+- `anti_crash_pid.*`
+- `roll_balance_pid.*`
 - 腿长 PID、转向 PID 及相关 legacy 控制参数
 - 如有必要，再继续检查速度误差进入控制链的定义与计算位置
 
 当前参数口径先固定为：
 
 - `velocity_ref_lpf_rc` 越大，滤波越强。
-- `velocity_ref_slew_rate` 越小，速度参考变化越平缓。
+- `velocity_ref_slew_rate` 越小，速度参考变化越平缓；设为 `0.0` 表示关闭斜率限制，仅保留低通结果。
+- `yaw_rate_ref_lpf_rc` 越大，角速度参考滤波越强。
+- `yaw_rate_ref_slew_rate` 越小，角速度参考变化越平缓；设为 `0.0` 表示关闭斜率限制，仅保留低通结果。
+- `leg_length_ref_lpf_rc` 越大，高度对应的腿长目标滤波越强。
+- `turn_hip_feedforward_scale` 越大，转向时叠加到左右髋差力矩上的前馈越强；设为 `0.0` 表示临时关闭这条前馈链，仅保留 steer PID、anti-crash 与 LQR 本体。
 - `velocity_snap_threshold` 默认按 `0.1 m/s` 理解，判断口径固定为 `|filtered_target_velocity - commanded_target_velocity|`。
-- `velocity_zero_hold_threshold` 默认按 `0.1 m/s` 理解，用于空杆或近零速时的距离参考重锚定保护。
+- `velocity_zero_hold_threshold` 为历史零速保持参数；当前纯积分口径下不再用于 `target_distance` 生成。
 - `target_phi_deg` 后续应作为腿部姿态目标校准入口，默认仍以当前 `90.0 deg` 为基线。
 - `target_pitch` 后续仅在确认 `body.pitch` 稳定偏离 `0` 后再引入或调整。
+- `anti_crash_pid.*` 是限制左右 `phi` 劈叉的主入口；当双腿腿长相同但 `phi` 不同时，底盘仍可能产生 roll 偏差。
+- `roll_balance_pid.*` 是当前新增的 roll 补偿环，输出叠加到左右 LQR hip 输出且左右反号，用于消除等腿长下由双腿劈叉引出的侧倾偏差。
 
 当前现场临时基线先固定为：
 
@@ -68,6 +80,17 @@
 - `linear_x.scale`
 - `linear_x.reverse`
 
+当前遥控调整阶段已固定：
+
+- `velocity_snap_threshold = 0.0`
+- `velocity_ref_lpf_rc = 0.4`
+- `velocity_ref_slew_rate = 0.8`
+- `yaw_rate_assist_scale` 默认改为 `0.0`，避免 `CH1` 右摇杆左右通过 `/body_cmd.yaw_rate_assist` 叠加到转向。
+- 默认转向只由 `CH4 -> /cmd_vel.angular.z -> target_yaw_rate` 进入控制器。
+- 当前已将转向髋部前馈重新收口为单一运行时参数 `turn_hip_feedforward_scale`，默认值 `3.0` 与当前 `swerving_speed_ff = 3.0 * steer_output` 行为等价。
+- 当前优先验证点固定为：`turn_hip_feedforward_scale = 3.0` 和 `turn_hip_feedforward_scale = 0.0`。
+- 遥控连续量输入当前统一按 `-1.0 ~ 1.0` 口径观察与调参。
+
 ## 6. 调参原则
 
 1. 一次只改一组强相关参数。
@@ -80,12 +103,13 @@
 
 - 当前 `velocity` 模式问题不再只按“调几个增益”处理，而是按“参考生成逻辑 + 空杆保护 + 输入滤波策略”共同导致处理。
 - 当前默认判断是：`velocity` 模式中的速度目标会进入“速度参考积分成距离参考”的链路，因此模式切换、空杆和恢复复控时都必须重点检查参考是否被错误继承。
+- 当前已验证纯积分口径下速度链路恢复正常：`target_distance` 由 `filtered_target_velocity * dt` 积分生成，回中不再重新锚定到当前 `body.distance`。
 - 当前实现前置目标不是先继续放大 `target_velocity_scale`，而是先消除错误参考、空杆漂移和观测链路噪声对判断的干扰。
 - 当前进一步观察到：实际位移 `body.distance` 会长期和 `target_distance` 保持一段距离，且初始化落地后总要先向后跑一段。
 - 当前优先判断该现象可能来自 LQR 多状态耦合下的站立平衡点偏置：控制器用 `distance` 误差补偿 `phi` 或 `body.pitch` 目标误差。
 - 当前进一步确认 MuJoCo 仿真默认仍保留 legacy stand control；ROS takeover 生效后会绕过 legacy 控制，改为只执行 ROS 发布的 `/joint_command`。
 - 当前进一步确认 `body.distance` 不是世界系绝对 `x`，而是按底盘前向速度积分得到的距离状态；因此启动阶段先后退的一段会直接积成初始负偏置。
-- 在完成站立平衡点校准前，不继续优先调整遥控输入中位、死区或速度输入映射。
+- 当前已进入遥控器调整阶段，优先通过滤波前/滤波后的目标对比决定低通参数。
 
 ## 6.2 LQR 状态与目标说明
 
@@ -124,10 +148,10 @@
    - 重点检查 `velocity` 模式下速度参考初始化、距离积分和空杆保护。
    - `target_distance` 应由 `filtered_target_velocity * dt` 积分生成，不在空杆时重新锚定到当前车体位置。
 
-4. 站立平衡点校准
-   - 先补充 `phi/pitch` 观测，再判断实际稳定姿态是否偏离当前目标。
-   - 优先校准 `target_phi`，必要时再考虑 `target_pitch`。
-   - 在该阶段暂不调整遥控输入相关参数。
+4. 遥控器滤波调整
+   - 观察速度、角速度和高度三组滤波前/滤波后参考。
+   - 优先用低频 plot 话题决定 `velocity_ref_lpf_rc`、`yaw_rate_ref_lpf_rc` 和 `leg_length_ref_lpf_rc`。
+   - 若响应过慢，再联动检查对应 slew rate 参数。
 
 5. 速度持续性与速度上限
    - 在参考逻辑修复后，再观察 `velocity` 模式下机器人是否能持续形成前进趋势。
@@ -135,7 +159,7 @@
 
 6. 转向响应
    - 优先降低 `target_yaw_rate_scale`。
-   - 如仍偏快，再看 `yaw_rate_assist_scale` 和转向相关控制参数。
+   - `yaw_rate_assist_scale` 默认保持 `0.0`，需要右摇杆左右参与辅助转向时再显式打开。
 
 7. 高度范围
    - 逐步提高 `body_height_offset_scale`。
@@ -170,6 +194,14 @@
   - `ref_secondary=target_pitch_deg`
   - `now_secondary=body_pitch_deg`
 - 保留 `/debug/plot/velocity/ref_primary` 与 `/debug/plot/velocity/now_primary`，用于观察 `target_distance` 与 `body.distance` 的长期偏差。
+- 当前新增三组滤波对比低频话题，口径固定为 `ref_primary=滤波前目标`、`now_primary=滤波后目标`：
+  - `/debug/plot/ref_filter/velocity`
+  - `/debug/plot/ref_filter/yaw_rate`
+  - `/debug/plot/ref_filter/leg_length`
+- 当前新增 roll 补偿观测话题：
+  - `/debug/control/roll_balance`
+  - `/debug/plot/roll_balance`
+  - 口径固定为 `ref_primary=0.0`、`now_primary=body.roll`、`ref_secondary=body.roll_rate`、`now_secondary=roll_balance_output`
 
 ## 8.1 站立平衡点校准流程
 
@@ -192,6 +224,23 @@
 4. 最后回到速度链路
    - 只有当静态站立距离偏差明显减小后，再继续调 `velocity_ref_lpf_rc`、`velocity_ref_slew_rate` 和 `target_velocity_scale`。
    - 转向和高度仍排在速度基础稳定之后。
+
+## 8.2 左转右压定位命令
+
+- 当前最终结论：左转右压主因不是单纯腿长 PID 不够，也不是轮差速符号错误；主要是双腿发生劈叉后 `left_phi/right_phi` 不同，导致在左右腿长相同的情况下仍出现 body roll 偏差。
+- 当前有效修正：加强 `anti_crash_pid` 抑制左右 `phi` 差，同时增加 `roll_balance_pid` 将 roll 误差补偿叠加到左右 LQR hip 输出，左右符号相反。
+- 当前腿长重力补偿已改为按 `roll` 角计算，避免用 `pitch` 角解释横向侧倾载荷。
+- 后续转向调参应先保证左右 `phi` 差与 roll 偏差不过度积累，再回头微调 `turn_hip_feedforward_scale` 的转向手感。
+- 启动 controller 并显式固定当前转向髋前馈基线：
+  - `ros2 run wheel_leg_control wheel_leg_controller_node --ros-args -p turn_hip_feedforward_scale:=3.0`
+- 在线临时关闭转向髋前馈，直接验证左转右压是否同步减轻：
+  - `ros2 param set /wheel_leg_controller turn_hip_feedforward_scale 0.0`
+- 在线恢复当前等价默认行为：
+  - `ros2 param set /wheel_leg_controller turn_hip_feedforward_scale 3.0`
+- 采集左右轮差速、anti-crash 与左右髋差值调试量：
+  - `python3 tools/turn_sign_capture.py --output /tmp/wheel_leg_turn_sign_capture.csv`
+- 当前 `turn_hip_feedforward_scale` 支持运行时更新；`steer_pid.*`、`anti_crash_pid.*`、`leg_length_pid.*` 与 `target_yaw_rate_scale` 仍按“改后重启 controller 才真正生效”处理。
+- 当前 `roll_balance_pid.*` 也按“改后重启 controller 才真正生效”处理。
 
 ## 9. 每轮记录模板
 
@@ -235,7 +284,67 @@
 
 ## 12. 当前状态
 
-- `[~]` 进行中，已完成观测链路收口与 `velocity` 回中参考漂移修复
+- `[v]` 仿真遥控控制基线已冻结，可进入 STM32 通信阶段
+
+## 12.0 冻结基线参数
+
+当前阶段已完成 RC 映射参数、PID 参数与 LQR 参数确认。以下参数已固化为当前仿真遥控控制基线：
+
+```text
+RC 映射：
+- linear_x.channel = 2
+- linear_x.scale = 1.0
+- angular_z.channel = 4
+- angular_z.scale = 1.0
+- angular_z.reverse = true
+- body_height.channel = 3
+- body_height.scale = 1.0
+- yaw_rate_assist.channel = 1
+- yaw_rate_assist.scale = 1.0
+- body_height_scale = 0.15
+
+Controller 目标映射：
+- target_velocity_scale = 0.6
+- target_yaw_rate_scale = 2.0
+- yaw_rate_assist_scale = 0.0
+- body_height_offset_scale = 0.2
+- target_leg_length_min = 0.23
+- target_leg_length_max = 0.33
+- target_phi_deg = 97.1
+- target_pitch_deg = 0.0
+- turn_hip_feedforward_scale = 3.0
+
+输入参考滤波：
+- velocity_ref_lpf_rc = 0.12
+- velocity_ref_slew_rate = 1.5
+- velocity_snap_threshold = 0.1
+- yaw_rate_ref_lpf_rc = 0.4
+- yaw_rate_ref_slew_rate = 1.8
+- leg_length_ref_lpf_rc = 0.15
+
+Legacy PID：
+- leg_length_pid = kp 800.0, ki 50.0, kd 30.0, max_output 5000.0
+- steer_pid = kp 6.0, ki 0.8, kd 0.0, max_output 50.0
+- anti_crash_pid = kp 20.0, ki 0.5, kd 3.0, max_output 10.0
+- roll_balance_pid = kp 20.0, ki 3.0, kd 0.2, max_output 10.0
+```
+
+阶段收口结论：
+
+- `stand`、`velocity`、failsafe 与恢复复控保持为当前回归重点。
+- `velocity` 回中参考漂移已修复为纯积分口径，不再每帧追随 `body.distance`。
+- 左转右压已收敛，最终按“双腿劈叉导致 roll 偏差”处理，加强 `anti_crash_pid` 并增加 `roll_balance_pid`。
+- 高度范围已通过 `body_height_offset_scale` 与 `target_leg_length_min/max` 固化到当前可用窗口。
+- 这一阶段不再继续引入新的控制结构；后续进入 STM32 通信/实机闭环阶段。
+
+回归记录：
+
+```text
+- 2026-06-24 colcon build 回归通过：
+  colcon build --packages-select wheel_leg_msgs wheel_leg_common wheel_leg_bridge wheel_leg_control wheel_leg_sim wheel_leg_rc --event-handlers console_direct+
+- 结果：
+  6 packages finished
+```
 
 ## 12.1 当前调试记录
 
@@ -256,6 +365,128 @@
 - 结论：
   - 该问题属于 velocity 参考生成逻辑问题，不是单纯滤波参数或遥控中位偏差问题。
   - 后续调参应在该修复基础上继续速度、转向和高度收敛。
+```
+
+```text
+- 轮次：左转右压最终收敛结论
+- 现象：
+  - 左转时出现向右侧压、右腿被压低且仅增大腿长 kp 不能可靠恢复。
+  - 双腿腿长相同的情况下，仍可能因为左右 phi 不同导致车体 roll 偏差。
+- 根因：
+  - 双腿劈叉导致 `left_phi/right_phi` 出现差异，等腿长并不等价于等横向支撑。
+  - `phi` 差引出的 body roll 偏差会让一侧腿持续受压，表现为“右腿变短/回不去”。
+- 修改：
+  - 加强 `anti_crash_pid`，优先限制左右 `phi` 劈叉。
+  - 增加 `roll_balance_pid`，以 body roll 为输入，输出叠加到左右 LQR hip 端且左右反号。
+  - 腿长重力补偿改用 roll 角计算。
+- 结论：
+  - 问题已解决。
+  - 后续不要优先把该现象归因到腿长 PID 太软；应先看左右 `phi` 差、`anti_crash_output`、`roll_balance_output` 与左右 hip 差力矩。
+```
+
+```text
+- 轮次：velocity 纯积分 x_ref 验证与遥控器调整入口
+- 参数/逻辑：
+  - 取消中位候选区的 zero_hold_distance_ref 锁存口径。
+  - velocity 模式下 target_distance 固定由 filtered_target_velocity * dt 积分生成。
+  - yaw_rate_assist_scale 默认改为 0.0，避免 CH1 右摇杆左右叠加到转向。
+  - 新增 /debug/plot/ref_filter/velocity、/debug/plot/ref_filter/yaw_rate、/debug/plot/ref_filter/leg_length。
+- 测试：
+  - 用户现场验证 velocity 纯积分 x_ref 后整机表现。
+- 结果：
+  - 当前反馈速度链路已正常。
+  - 下一阶段进入遥控器输入滤波调参。
+- 结论：
+  - 后续通过三组 ref_filter 话题对比滤波前/滤波后目标，决定低通滤波参数。
+```
+
+```text
+- 轮次：滤波参数运行时更新修复
+- 参数/逻辑：
+  - 将 velocity_ref_lpf_rc、velocity_ref_slew_rate、velocity_snap_threshold 纳入动态参数更新。
+  - 将 yaw_rate_ref_lpf_rc、yaw_rate_ref_slew_rate、leg_length_ref_lpf_rc 纳入动态参数更新。
+  - 将 yaw_rate_assist_scale 纳入动态参数更新。
+- 现象：
+  - ros2 param set velocity_ref_lpf_rc 10.0 显示成功，但 /debug/plot/ref_filter/velocity 中 now_primary 仍几乎贴着 ref_primary。
+- 结论：
+  - 原因是参数服务器值已改变，但控制器运行时成员变量没有同步刷新。
+  - 修复后可直接用 ros2 param set 调低通参数，并通过 ref_filter 话题观察滤波前后差异。
+```
+
+```text
+- 轮次：slew_rate 关闭语义修复
+- 现象：
+  - velocity_ref_lpf_rc 已显示为 10.0，velocity_ref_slew_rate 已显示为 0.0，但 now_primary 仍贴着 ref_primary。
+- 原因：
+  - 斜率限制关闭语义需要固定为“不限制低通候选值”，否则现场很难判断低通参数是否真的生效。
+- 修改：
+  - max_rate <= 0 时返回 target，表示关闭斜率限制并直接采用前一步低通候选值。
+- 结论：
+  - 若要观察纯一阶低通，设置 velocity_snap_threshold=0.0、velocity_ref_slew_rate=0.0，再调 velocity_ref_lpf_rc。
+```
+
+```text
+- 轮次：slew_rate 斜率限制顺序修复
+- 现象：
+  - 将 velocity_ref_slew_rate 调得很小后，ref_filter 曲线仍主要表现为低通曲线，斜率变化不明显。
+- 原因：
+  - 旧实现先做低通，再以“低通后的当前值 -> 原始目标值”做 slew 限制。
+  - 这样限制到的是剩余误差，不是“上一帧最终输出 -> 这一帧最终输出”的实际变化量。
+- 修改：
+  - 先生成低通候选值，再用上一帧最终输出对该候选值做 slew 限制。
+- 结论：
+  - 现在 velocity_ref_slew_rate / yaw_rate_ref_slew_rate 会真正限制最终输出斜率。
+```
+
+```text
+- 轮次：velocity 参数与摇杆口径固定
+- 参数：
+  - velocity_snap_threshold = 0.0
+  - velocity_ref_lpf_rc = 0.4
+  - velocity_ref_slew_rate = 0.8
+  - 遥控连续量输入范围按 -1.0 ~ 1.0 口径观察
+- 结论：
+  - 当前先固定 velocity 三个参数，后续优先继续看 yaw_rate 和 leg_length 的滤波表现。
+```
+
+```text
+- 轮次：转向单侧压翻风险隔离
+- 现象：
+  - 向右转时整机可平稳转向，向左打时出现明显向右侧压、摇杆加大后向右倾倒。
+- 判断：
+  - 当前最可疑的是转向时叠加到左右髋关节上的 swerving/turn hip feedforward，而不是 yaw_rate 参考滤波本身。
+- 结论：
+  - 已按现场要求回退抗劈叉附近控制链修改。
+  - 当前 swerving_speed_ff 默认仍等价于 3.0 * steer_output，但已重新暴露为单参数 `turn_hip_feedforward_scale`，方便直接做 3.0/0.0 对照验证。
+```
+
+```text
+- 轮次：转向符号采集脚本与第一次数据结论
+- 工具：
+  - 新增 tools/turn_sign_capture.py，用于采集 yaw、yaw_ref_filter、anti_crash、wheel_effort 和 turn_internal 调试量。
+- 第一次数据：
+  - 后两段轻微左打接近侧翻，CSV 中 yaw_ref 为正，yaw_now 同号跟随。
+  - yaw_ref 负方向段中 wheel_right - wheel_left 均值约为 -0.054。
+  - 后两段 yaw_ref 正方向段中 wheel_right - wheel_left 均值约为 +0.157 和 +0.178。
+- 初步结论：
+  - 左右轮差速主链能随 yaw_ref 反号，不是当前首要嫌疑。
+  - 下一轮重点观察新增 /debug/plot/turn_internal，直接确认 steer_output、swerving_speed_ff 和左右髋差值的符号关系。
+```
+
+```text
+- 轮次：turn_internal 第二次采集结论
+- 数据：
+  - yaw_ref 负方向段：yaw_ref mean=-1.10，yaw_now mean=-1.09，wheel_R-L mean=-0.057。
+  - yaw_ref 正方向段：yaw_ref mean=+0.36/+0.32，yaw_now 同号跟随，wheel_R-L mean=+0.126/+0.125。
+  - yaw_ref 正方向段：steer_output mean=+0.235/+0.221，swerving_speed_ff mean=+0.705/+0.662，left_minus_right_hip_torque mean=+1.868/+1.701。
+  - 回中后仍有 steer_output 正向残留，带来 swerving_speed_ff 正向残留。
+- 结论：
+  - 左右轮差速主链会随 yaw_ref 反号，暂不作为首要嫌疑。
+  - 异常更集中在 steer_output -> swerving_speed_ff -> 左右髋差值链路。
+  - 左打时 swerving_speed_ff 明显为正并推高 left_minus_right_hip_torque，和“持续向右侧压”的现象一致。
+- 下一步：
+  - 暂不继续改抗劈叉/转向髋部前馈控制链。
+  - 若继续查左转侧压，优先通过观测链路确认符号和姿态状态，不先改 anti_crash/swerving 计算。
 ```
 
 ## 12.2 站立平衡点偏置记录
@@ -332,7 +563,7 @@
 
 ## 13. 下一步建议
 
-1. 保留当前 `target_phi = 97.1 deg` 的临时可运行基线，用于后续 ROS takeover 验证。
-2. 在 MATLAB 中优先提高 `x/dx` 权重，重新计算一版 LQR 增益。
-3. 用新增益先验证稳态振荡是否明显减小，再决定是否继续微调 `target_phi/target_pitch`。
-4. 站立平衡点与稳态振荡都明显改善后，再回到速度、转向和高度调参。
+1. 保留当前冻结参数作为 STM32 通信阶段前的仿真控制基线。
+2. 进入 STM32 阶段后，先保证 `/joint_command`、传感器状态与 failsafe 链路一致，再迁移控制参数。
+3. 实机闭环初期不要同步放大速度、转向和高度范围；优先小命令验证。
+4. 如实机出现新的稳态振荡或侧压，再按本轮记录优先检查 `phi` 差、roll 补偿和输出限幅。

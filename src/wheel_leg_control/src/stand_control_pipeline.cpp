@@ -8,7 +8,6 @@
 namespace wheel_leg_control {
 namespace {
 
-constexpr double kSwervingSpeedFeedforwardCoef = 3.0;
 constexpr double kLegLengthGravityCompMass = 3.99077;
 constexpr double kGravityAcceleration = 9.81;
 
@@ -70,6 +69,7 @@ ControlStepOutputs RunStandControlStep(
     double dt,
     const ControlTargets& targets,
     const StandControlState& control_state,
+    double turn_hip_feedforward_scale,
     const ControlAlgorithmSet& algorithms) {
   ControlStepOutputs outputs;
   const auto& right_leg = control_state.right_leg;
@@ -85,7 +85,7 @@ ControlStepOutputs RunStandControlStep(
        .dt = dt});
   const double leg_length_gravity_compensation =
       kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
-      std::cos(control_state.body.pitch);
+      std::cos(control_state.body.roll);
   outputs.right_leg_length_force =
       u_leg_length_r + leg_length_gravity_compensation;
   outputs.left_leg_length_force =
@@ -108,15 +108,19 @@ ControlStepOutputs RunStandControlStep(
        .target = targets.target_yaw_rate,
        .dt = dt});
   outputs.swerving_speed_ff =
-      kSwervingSpeedFeedforwardCoef * outputs.steer_output;
+      turn_hip_feedforward_scale * outputs.steer_output;
   outputs.anti_crash_output = algorithms.anti_crash_pid->Compute(
       {.measurement = left_leg.phi - right_leg.phi, .target = 0.0, .dt = dt});
+  outputs.roll_balance_output = algorithms.roll_balance_pid->Compute(
+      {.measurement = control_state.body.roll, .target = 0.0, .dt = dt});
   const double anti_crash_hip_torque =
       -outputs.anti_crash_output + outputs.swerving_speed_ff;
   outputs.left_lqr_hip_torque =
-      left_lqr_output.hip_torque + anti_crash_hip_torque;
+      left_lqr_output.hip_torque + anti_crash_hip_torque -
+      outputs.roll_balance_output;
   outputs.right_lqr_hip_torque =
-      right_lqr_output.hip_torque - anti_crash_hip_torque;
+      right_lqr_output.hip_torque - anti_crash_hip_torque +
+      outputs.roll_balance_output;
 
   const VmcJointTorques right_leg_command =
       algorithms.vmc_algorithm->Compute(

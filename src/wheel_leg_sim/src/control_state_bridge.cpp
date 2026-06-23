@@ -7,6 +7,8 @@ wheel_leg_control::StandControlState BuildStandControlState(
   wheel_leg_control::StandControlState control_state;
   control_state.body.distance = sensor_data.base_link.distance;
   control_state.body.velocity = sensor_data.base_link.velocity;
+  control_state.body.roll = sensor_data.base_link.roll;
+  control_state.body.roll_rate = sensor_data.base_link.roll_rate;
   control_state.body.pitch = sensor_data.base_link.pitch;
   control_state.body.pitch_rate = sensor_data.base_link.pitch_rate;
   control_state.body.yaw_rate = sensor_data.base_link.yaw_rate;

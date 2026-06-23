@@ -173,6 +173,8 @@ class ControllerNode : public rclcpp::Node {
         "steer_pid", DefaultStandLegacyPidDefaults().steer_velocity);
     pid_defaults_.anti_crash = LoadPidConfig(
         "anti_crash_pid", DefaultStandLegacyPidDefaults().anti_crash);
+    pid_defaults_.roll_balance = LoadPidConfig(
+        "roll_balance_pid", DefaultStandLegacyPidDefaults().roll_balance);
 
     publish_control_command_ =
         declare_parameter<bool>("publish_control_command", true);
@@ -193,15 +195,17 @@ class ControllerNode : public rclcpp::Node {
     target_velocity_scale_ =
         declare_parameter<double>("target_velocity_scale", 0.6);
     target_yaw_rate_scale_ =
-        declare_parameter<double>("target_yaw_rate_scale", 1.2);
+        declare_parameter<double>("target_yaw_rate_scale", 2.0);
     yaw_rate_assist_scale_ =
-        declare_parameter<double>("yaw_rate_assist_scale", 1.0);
+        declare_parameter<double>("yaw_rate_assist_scale", 0.0);
+    turn_hip_feedforward_scale_ = declare_parameter<double>(
+        "turn_hip_feedforward_scale", DefaultTurnHipFeedforwardScale());
     body_height_offset_scale_ =
-        declare_parameter<double>("body_height_offset_scale", 0.05);
+        declare_parameter<double>("body_height_offset_scale", 0.2);
     target_leg_length_min_ =
-        declare_parameter<double>("target_leg_length_min", 0.22);
+        declare_parameter<double>("target_leg_length_min", 0.23);
     target_leg_length_max_ =
-        declare_parameter<double>("target_leg_length_max", 0.30);
+        declare_parameter<double>("target_leg_length_max", 0.33);
     target_phi_deg_ =
         declare_parameter<double>("target_phi_deg", 97.1);
     target_pitch_deg_ =
@@ -223,9 +227,9 @@ class ControllerNode : public rclcpp::Node {
     zero_hold_wheel_effort_limit_ =
         declare_parameter<double>("zero_hold_wheel_effort_limit", -1.0);
     yaw_rate_ref_lpf_rc_ =
-        declare_parameter<double>("yaw_rate_ref_lpf_rc", 0.10);
+        declare_parameter<double>("yaw_rate_ref_lpf_rc", 0.4);
     yaw_rate_ref_slew_rate_ =
-        declare_parameter<double>("yaw_rate_ref_slew_rate", 6.0);
+        declare_parameter<double>("yaw_rate_ref_slew_rate", 1.8);
     leg_length_ref_lpf_rc_ =
         declare_parameter<double>("leg_length_ref_lpf_rc", 0.15);
     debug_plot_publish_hz_ =
@@ -241,6 +245,7 @@ class ControllerNode : public rclcpp::Node {
     default_targets_.target_pitch = DegreesToRadiansLocal(target_pitch_deg_);
     latest_control_mode_ = kModeStand;
     orchestrator_.ConfigurePidDefaults(pid_defaults_);
+    orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
     parameter_callback_handle_ = add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter>& parameters) {
           return HandleParameterUpdate(parameters);
@@ -292,9 +297,15 @@ class ControllerNode : public rclcpp::Node {
     leg_length_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/leg_length", rclcpp::SystemDefaultsQoS());
+    leg_length_output_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/leg_length_output", rclcpp::SystemDefaultsQoS());
     anti_crash_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/anti_crash", rclcpp::SystemDefaultsQoS());
+    roll_balance_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/roll_balance", rclcpp::SystemDefaultsQoS());
     velocity_plot_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/plot/velocity", rclcpp::SystemDefaultsQoS());
@@ -304,9 +315,15 @@ class ControllerNode : public rclcpp::Node {
     leg_length_plot_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/plot/leg_length", rclcpp::SystemDefaultsQoS());
+    leg_length_output_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/leg_length_output", rclcpp::SystemDefaultsQoS());
     anti_crash_plot_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/plot/anti_crash", rclcpp::SystemDefaultsQoS());
+    roll_balance_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/roll_balance", rclcpp::SystemDefaultsQoS());
     wheel_effort_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/wheel_effort", rclcpp::SystemDefaultsQoS());
@@ -319,6 +336,21 @@ class ControllerNode : public rclcpp::Node {
     balance_plot_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/plot/balance", rclcpp::SystemDefaultsQoS());
+    turn_internal_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/turn_internal", rclcpp::SystemDefaultsQoS());
+    turn_internal_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/turn_internal", rclcpp::SystemDefaultsQoS());
+    velocity_ref_filter_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/ref_filter/velocity", rclcpp::SystemDefaultsQoS());
+    yaw_rate_ref_filter_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/ref_filter/yaw_rate", rclcpp::SystemDefaultsQoS());
+    leg_length_ref_filter_plot_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/plot/ref_filter/leg_length", rclcpp::SystemDefaultsQoS());
   }
 
  private:
@@ -329,6 +361,14 @@ class ControllerNode : public rclcpp::Node {
 
     double next_target_phi_deg = target_phi_deg_;
     double next_target_pitch_deg = target_pitch_deg_;
+    double next_velocity_ref_lpf_rc = velocity_ref_lpf_rc_;
+    double next_velocity_ref_slew_rate = velocity_ref_slew_rate_;
+    double next_velocity_snap_threshold = velocity_snap_threshold_;
+    double next_yaw_rate_ref_lpf_rc = yaw_rate_ref_lpf_rc_;
+    double next_yaw_rate_ref_slew_rate = yaw_rate_ref_slew_rate_;
+    double next_leg_length_ref_lpf_rc = leg_length_ref_lpf_rc_;
+    double next_yaw_rate_assist_scale = yaw_rate_assist_scale_;
+    double next_turn_hip_feedforward_scale = turn_hip_feedforward_scale_;
 
     for (const auto& parameter : parameters) {
       if (parameter.get_name() == "target_phi_deg") {
@@ -348,6 +388,91 @@ class ControllerNode : public rclcpp::Node {
           result.reason = "target_pitch_deg must be finite";
           return result;
         }
+        continue;
+      }
+
+      if (parameter.get_name() == "velocity_ref_lpf_rc") {
+        next_velocity_ref_lpf_rc = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_velocity_ref_lpf_rc)) {
+          result.successful = false;
+          result.reason = "velocity_ref_lpf_rc must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "velocity_ref_slew_rate") {
+        next_velocity_ref_slew_rate = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_velocity_ref_slew_rate)) {
+          result.successful = false;
+          result.reason =
+              "velocity_ref_slew_rate must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "velocity_snap_threshold") {
+        next_velocity_snap_threshold = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_velocity_snap_threshold)) {
+          result.successful = false;
+          result.reason =
+              "velocity_snap_threshold must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "yaw_rate_ref_lpf_rc") {
+        next_yaw_rate_ref_lpf_rc = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_yaw_rate_ref_lpf_rc)) {
+          result.successful = false;
+          result.reason = "yaw_rate_ref_lpf_rc must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "yaw_rate_ref_slew_rate") {
+        next_yaw_rate_ref_slew_rate = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_yaw_rate_ref_slew_rate)) {
+          result.successful = false;
+          result.reason =
+              "yaw_rate_ref_slew_rate must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "leg_length_ref_lpf_rc") {
+        next_leg_length_ref_lpf_rc = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_leg_length_ref_lpf_rc)) {
+          result.successful = false;
+          result.reason =
+              "leg_length_ref_lpf_rc must be finite and non-negative";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "yaw_rate_assist_scale") {
+        next_yaw_rate_assist_scale = parameter.as_double();
+        if (!std::isfinite(next_yaw_rate_assist_scale)) {
+          result.successful = false;
+          result.reason = "yaw_rate_assist_scale must be finite";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "turn_hip_feedforward_scale") {
+        next_turn_hip_feedforward_scale = parameter.as_double();
+        if (!std::isfinite(next_turn_hip_feedforward_scale)) {
+          result.successful = false;
+          result.reason = "turn_hip_feedforward_scale must be finite";
+          return result;
+        }
+        continue;
       }
     }
 
@@ -355,7 +480,20 @@ class ControllerNode : public rclcpp::Node {
     target_pitch_deg_ = next_target_pitch_deg;
     default_targets_.target_phi = DegreesToRadiansLocal(target_phi_deg_);
     default_targets_.target_pitch = DegreesToRadiansLocal(target_pitch_deg_);
+    velocity_ref_lpf_rc_ = next_velocity_ref_lpf_rc;
+    velocity_ref_slew_rate_ = next_velocity_ref_slew_rate;
+    velocity_snap_threshold_ = next_velocity_snap_threshold;
+    yaw_rate_ref_lpf_rc_ = next_yaw_rate_ref_lpf_rc;
+    yaw_rate_ref_slew_rate_ = next_yaw_rate_ref_slew_rate;
+    leg_length_ref_lpf_rc_ = next_leg_length_ref_lpf_rc;
+    yaw_rate_assist_scale_ = next_yaw_rate_assist_scale;
+    turn_hip_feedforward_scale_ = next_turn_hip_feedforward_scale;
+    orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
     return result;
+  }
+
+  bool IsFiniteAndNonNegative(double value) const {
+    return std::isfinite(value) && value >= 0.0;
   }
 
   LegacyPidConfig LoadPidConfig(
@@ -371,10 +509,15 @@ class ControllerNode : public rclcpp::Node {
         prefix + ".integral_limit", defaults.integral_limit);
     config.deadband =
         declare_parameter<double>(prefix + ".deadband", defaults.deadband);
+    config.improvement_flags = static_cast<std::uint32_t>(
+        declare_parameter<int>(prefix + ".improvement_flags",
+                               static_cast<int>(defaults.improvement_flags)));
     config.coef_a =
         declare_parameter<double>(prefix + ".coef_a", defaults.coef_a);
     config.coef_b =
         declare_parameter<double>(prefix + ".coef_b", defaults.coef_b);
+    config.output_lpf_rc = declare_parameter<double>(
+        prefix + ".output_lpf_rc", defaults.output_lpf_rc);
     config.derivative_lpf_rc = declare_parameter<double>(
         prefix + ".derivative_lpf_rc", defaults.derivative_lpf_rc);
     return config;
@@ -477,19 +620,22 @@ class ControllerNode : public rclcpp::Node {
 
     const StandControlState effective_control_state =
         BuildEffectiveControlState(control_state);
-    const auto command =
+    const auto step_outputs =
         orchestrator_.Step(state_time_sec, dt, effective_control_state);
-    if (!command.has_value()) {
+    if (!step_outputs.has_value()) {
       PublishWheelEffortDebug(BuildZeroCommand(state_time_sec), state_time_sec);
       return;
     }
 
-    auto limited_command = *command;
+    auto limited_command = step_outputs->command;
     ClampCommand(&limited_command);
     ApplyZeroHoldCommandLimit(&limited_command);
     PublishWheelEffortDebug(limited_command, state_time_sec);
+    PublishLegLengthOutputDebug(*step_outputs, state_time_sec);
+    PublishRollBalanceDebug(*step_outputs, control_state, state_time_sec);
+    PublishTurnInternalDebug(*step_outputs, state_time_sec);
     RecordTraceSample(
-        state_time_sec, dt, control_state, *command, limited_command);
+        state_time_sec, dt, control_state, step_outputs->command, limited_command);
     joint_command_pub_->publish(
         wheel_leg_bridge::ToRosJointCommand(limited_command));
   }
@@ -598,7 +744,8 @@ class ControllerNode : public rclcpp::Node {
     ControlTargets filtered_targets =
         ApplyTargetFiltering(arbitration, control_state, state_time_sec, dt,
                              mode_changed, fallback_active);
-    PublishDebugTopics(filtered_targets, control_state, state_time_sec);
+    PublishDebugTopics(
+        arbitration.targets, filtered_targets, control_state, state_time_sec);
     orchestrator_.SetTargets(filtered_targets);
 
     if (mode_changed || reason_changed) {
@@ -673,26 +820,26 @@ class ControllerNode : public rclcpp::Node {
     if (velocity_error <= velocity_snap_threshold_) {
       filter_state_.filtered_velocity = commanded_velocity;
     } else {
-      filter_state_.filtered_velocity = ApplyFirstOrderLowPass(
+      const double velocity_candidate = ApplyFirstOrderLowPass(
           filter_state_.filtered_velocity,
           commanded_velocity,
           velocity_ref_lpf_rc_,
           dt);
       filter_state_.filtered_velocity = ApplySlewRateLimit(
           filter_state_.filtered_velocity,
-          commanded_velocity,
+          velocity_candidate,
           velocity_ref_slew_rate_,
           dt);
     }
 
-    filter_state_.filtered_yaw_rate = ApplyFirstOrderLowPass(
+    const double yaw_rate_candidate = ApplyFirstOrderLowPass(
         filter_state_.filtered_yaw_rate,
         filtered_targets.target_yaw_rate,
         yaw_rate_ref_lpf_rc_,
         dt);
     filter_state_.filtered_yaw_rate = ApplySlewRateLimit(
         filter_state_.filtered_yaw_rate,
-        filtered_targets.target_yaw_rate,
+        yaw_rate_candidate,
         yaw_rate_ref_slew_rate_,
         dt);
 
@@ -774,7 +921,8 @@ class ControllerNode : public rclcpp::Node {
     }
   }
 
-  void PublishDebugTopics(const ControlTargets& targets,
+  void PublishDebugTopics(const ControlTargets& raw_targets,
+                          const ControlTargets& targets,
                           const StandControlState& control_state,
                           double state_time_sec) {
     const auto stamp = [state_time_sec]() {
@@ -837,6 +985,33 @@ class ControllerNode : public rclcpp::Node {
     leg_length_plot_pub_->publish(leg_msg);
     anti_crash_plot_pub_->publish(anti_crash_msg);
     balance_plot_pub_->publish(balance_msg);
+
+    wheel_leg_msgs::msg::ControlLoopDebug velocity_filter_msg;
+    velocity_filter_msg.header.stamp = stamp;
+    velocity_filter_msg.loop_name = "velocity_ref_filter";
+    velocity_filter_msg.ref_primary = raw_targets.target_velocity;
+    velocity_filter_msg.now_primary = targets.target_velocity;
+    velocity_filter_msg.ref_secondary = velocity_ref_lpf_rc_;
+    velocity_filter_msg.now_secondary = velocity_ref_slew_rate_;
+    velocity_ref_filter_plot_pub_->publish(velocity_filter_msg);
+
+    wheel_leg_msgs::msg::ControlLoopDebug yaw_filter_msg;
+    yaw_filter_msg.header.stamp = stamp;
+    yaw_filter_msg.loop_name = "yaw_rate_ref_filter";
+    yaw_filter_msg.ref_primary = raw_targets.target_yaw_rate;
+    yaw_filter_msg.now_primary = targets.target_yaw_rate;
+    yaw_filter_msg.ref_secondary = yaw_rate_ref_lpf_rc_;
+    yaw_filter_msg.now_secondary = yaw_rate_ref_slew_rate_;
+    yaw_rate_ref_filter_plot_pub_->publish(yaw_filter_msg);
+
+    wheel_leg_msgs::msg::ControlLoopDebug leg_filter_msg;
+    leg_filter_msg.header.stamp = stamp;
+    leg_filter_msg.loop_name = "leg_length_ref_filter";
+    leg_filter_msg.ref_primary = raw_targets.target_leg_length;
+    leg_filter_msg.now_primary = targets.target_leg_length;
+    leg_filter_msg.ref_secondary = leg_length_ref_lpf_rc_;
+    leg_filter_msg.now_secondary = 0.0;
+    leg_length_ref_filter_plot_pub_->publish(leg_filter_msg);
   }
 
   bool ShouldPublishPlotTopics(double state_time_sec) {
@@ -883,6 +1058,145 @@ class ControllerNode : public rclcpp::Node {
     if (ShouldPublishWheelPlotTopic(state_time_sec)) {
       wheel_effort_plot_pub_->publish(wheel_msg);
     }
+  }
+
+  void PublishTurnInternalDebug(
+      const ControlStepOutputs& outputs,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug turn_msg;
+    turn_msg.header.stamp = stamp;
+    turn_msg.loop_name = "turn_internal";
+    turn_msg.ref_primary = outputs.steer_output;
+    turn_msg.now_primary = outputs.swerving_speed_ff;
+    turn_msg.ref_secondary = outputs.anti_crash_output;
+    turn_msg.now_secondary =
+        outputs.left_lqr_hip_torque - outputs.right_lqr_hip_torque;
+    turn_internal_debug_pub_->publish(turn_msg);
+
+    if (ShouldPublishTurnInternalPlotTopic(state_time_sec)) {
+      turn_internal_plot_pub_->publish(turn_msg);
+    }
+  }
+
+  void PublishLegLengthOutputDebug(
+      const ControlStepOutputs& outputs,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug leg_output_msg;
+    leg_output_msg.header.stamp = stamp;
+    leg_output_msg.loop_name = "leg_length_output";
+    leg_output_msg.ref_primary = outputs.left_leg_length_force;
+    leg_output_msg.now_primary = outputs.right_leg_length_force;
+    leg_output_msg.ref_secondary = outputs.left_leg_length_force -
+                                   outputs.right_leg_length_force;
+    leg_output_msg.now_secondary = 0.5 * (outputs.left_leg_length_force +
+                                          outputs.right_leg_length_force);
+    leg_length_output_debug_pub_->publish(leg_output_msg);
+
+    if (ShouldPublishLegLengthOutputPlotTopic(state_time_sec)) {
+      leg_length_output_plot_pub_->publish(leg_output_msg);
+    }
+  }
+
+  bool ShouldPublishLegLengthOutputPlotTopic(double state_time_sec) {
+    if (debug_plot_publish_hz_ <= 0.0) {
+      return false;
+    }
+
+    if (last_leg_length_output_plot_publish_time_sec_ < 0.0) {
+      last_leg_length_output_plot_publish_time_sec_ = state_time_sec;
+      return true;
+    }
+
+    const double plot_period_sec = 1.0 / debug_plot_publish_hz_;
+    if (state_time_sec - last_leg_length_output_plot_publish_time_sec_ + 1e-12 <
+        plot_period_sec) {
+      return false;
+    }
+
+    last_leg_length_output_plot_publish_time_sec_ = state_time_sec;
+    return true;
+  }
+
+  void PublishRollBalanceDebug(
+      const ControlStepOutputs& outputs,
+      const StandControlState& control_state,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug roll_msg;
+    roll_msg.header.stamp = stamp;
+    roll_msg.loop_name = "roll_balance";
+    roll_msg.ref_primary = 0.0;
+    roll_msg.now_primary = control_state.body.roll;
+    roll_msg.ref_secondary = control_state.body.roll_rate;
+    roll_msg.now_secondary = outputs.roll_balance_output;
+    roll_balance_debug_pub_->publish(roll_msg);
+
+    if (ShouldPublishRollBalancePlotTopic(state_time_sec)) {
+      roll_balance_plot_pub_->publish(roll_msg);
+    }
+  }
+
+  bool ShouldPublishRollBalancePlotTopic(double state_time_sec) {
+    if (debug_plot_publish_hz_ <= 0.0) {
+      return false;
+    }
+
+    if (last_roll_balance_plot_publish_time_sec_ < 0.0) {
+      last_roll_balance_plot_publish_time_sec_ = state_time_sec;
+      return true;
+    }
+
+    const double plot_period_sec = 1.0 / debug_plot_publish_hz_;
+    if (state_time_sec - last_roll_balance_plot_publish_time_sec_ + 1e-12 <
+        plot_period_sec) {
+      return false;
+    }
+
+    last_roll_balance_plot_publish_time_sec_ = state_time_sec;
+    return true;
+  }
+
+  bool ShouldPublishTurnInternalPlotTopic(double state_time_sec) {
+    if (debug_plot_publish_hz_ <= 0.0) {
+      return false;
+    }
+
+    if (last_turn_internal_plot_publish_time_sec_ < 0.0) {
+      last_turn_internal_plot_publish_time_sec_ = state_time_sec;
+      return true;
+    }
+
+    const double plot_period_sec = 1.0 / debug_plot_publish_hz_;
+    if (state_time_sec - last_turn_internal_plot_publish_time_sec_ + 1e-12 <
+        plot_period_sec) {
+      return false;
+    }
+
+    last_turn_internal_plot_publish_time_sec_ = state_time_sec;
+    return true;
   }
 
   bool ShouldPublishWheelPlotTopic(double state_time_sec) {
@@ -969,7 +1283,7 @@ class ControllerNode : public rclcpp::Node {
 
     output << std::fixed << std::setprecision(9);
     output << "reason,state_time_sec,dt,"
-           << "body_distance,body_velocity,body_pitch,body_pitch_rate,body_yaw_rate,"
+           << "body_distance,body_velocity,body_roll,body_roll_rate,body_pitch,body_pitch_rate,body_yaw_rate,"
            << "left_leg_length,left_phi,right_leg_length,right_phi,"
            << "raw_right_hip,raw_right_knee,raw_left_hip,raw_left_knee,raw_right_wheel,raw_left_wheel,"
            << "clamped_right_hip,clamped_right_knee,clamped_left_hip,clamped_left_knee,clamped_right_wheel,clamped_left_wheel\n";
@@ -980,6 +1294,8 @@ class ControllerNode : public rclcpp::Node {
              << sample.dt << ','
              << sample.state.body.distance << ','
              << sample.state.body.velocity << ','
+             << sample.state.body.roll << ','
+             << sample.state.body.roll_rate << ','
              << sample.state.body.pitch << ','
              << sample.state.body.pitch_rate << ','
              << sample.state.body.yaw_rate << ','
@@ -1043,6 +1359,7 @@ class ControllerNode : public rclcpp::Node {
   double target_velocity_scale_ = 0.0;
   double target_yaw_rate_scale_ = 0.0;
   double yaw_rate_assist_scale_ = 0.0;
+  double turn_hip_feedforward_scale_ = DefaultTurnHipFeedforwardScale();
   double body_height_offset_scale_ = 0.0;
   double target_leg_length_min_ = 0.0;
   double target_leg_length_max_ = 0.0;
@@ -1064,6 +1381,9 @@ class ControllerNode : public rclcpp::Node {
   double zero_hold_distance_ref_ = 0.0;
   double last_plot_publish_time_sec_ = -1.0;
   double last_wheel_plot_publish_time_sec_ = -1.0;
+  double last_turn_internal_plot_publish_time_sec_ = -1.0;
+  double last_leg_length_output_plot_publish_time_sec_ = -1.0;
+  double last_roll_balance_plot_publish_time_sec_ = -1.0;
   double zero_hold_candidate_start_time_sec_ = -1.0;
   double last_cmd_vel_time_sec_ = -1.0;
   double last_control_mode_time_sec_ = -1.0;
@@ -1100,7 +1420,11 @@ class ControllerNode : public rclcpp::Node {
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       leg_length_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      leg_length_output_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       anti_crash_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      roll_balance_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       velocity_plot_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
@@ -1108,7 +1432,11 @@ class ControllerNode : public rclcpp::Node {
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       leg_length_plot_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      leg_length_output_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       anti_crash_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      roll_balance_plot_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       wheel_effort_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
@@ -1117,6 +1445,16 @@ class ControllerNode : public rclcpp::Node {
       balance_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       balance_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      turn_internal_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      turn_internal_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      velocity_ref_filter_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      yaw_rate_ref_filter_plot_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      leg_length_ref_filter_plot_pub_;
 };
 
 }  // namespace wheel_leg_control

@@ -19,6 +19,8 @@ StandControlState FromRosStandControlState(
   StandControlState state;
   state.body.distance = msg.body_distance;
   state.body.velocity = msg.body_velocity;
+  state.body.roll = msg.body_roll;
+  state.body.roll_rate = msg.body_roll_rate;
   state.body.pitch = msg.body_pitch;
   state.body.pitch_rate = msg.body_pitch_rate;
   state.body.yaw_rate = msg.body_yaw_rate;
@@ -42,6 +44,8 @@ wheel_leg_msgs::msg::StandControlState ToRosStandControlState(
   msg.header = ToRosHeader(stamp);
   msg.body_distance = state.body.distance;
   msg.body_velocity = state.body.velocity;
+  msg.body_roll = state.body.roll;
+  msg.body_roll_rate = state.body.roll_rate;
   msg.body_pitch = state.body.pitch;
   msg.body_pitch_rate = state.body.pitch_rate;
   msg.body_yaw_rate = state.body.yaw_rate;

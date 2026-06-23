@@ -11,6 +11,7 @@ struct ControlAlgorithmSet {
   PidAlgorithm* leglen_pid_r = nullptr;
   PidAlgorithm* steer_v_pid = nullptr;
   PidAlgorithm* anti_crash_pid = nullptr;
+  PidAlgorithm* roll_balance_pid = nullptr;
   const LqrAlgorithm* lqr_algorithm = nullptr;
   const VmcAlgorithm* vmc_algorithm = nullptr;
 };
@@ -20,6 +21,7 @@ ControlStepOutputs RunStandControlStep(
     double dt,
     const ControlTargets& targets,
     const StandControlState& control_state,
+    double turn_hip_feedforward_scale,
     const ControlAlgorithmSet& algorithms);
 
 }  // namespace wheel_leg_control

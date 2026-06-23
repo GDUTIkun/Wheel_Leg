@@ -25,18 +25,23 @@ struct StandLegacyPidDefaults {
   LegacyPidConfig leg_length;
   LegacyPidConfig steer_velocity;
   LegacyPidConfig anti_crash;
+  LegacyPidConfig roll_balance;
 };
 
 constexpr double DegreesToRadians(double degrees) {
   return degrees * 3.14159265358979323846 / 180.0;
 }
 
+constexpr double DefaultTurnHipFeedforwardScale() {
+  return 3.2;
+}
+
 inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
   return {
       .leg_length =
           {
-              .kp = 1300.0,
-              .ki = 200.0,
+              .kp = 800.0,
+              .ki = 50.0,
               .kd = 30.0,
               .max_output = 5000.0,
               .deadband = 0.0001,
@@ -63,9 +68,9 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
           },
       .anti_crash =
           {
-              .kp = 3.0,
-              .ki = 0.1,
-              .kd = 0.0,
+              .kp = 20.0,
+              .ki = 0.5,
+              .kd = 3,
               .max_output = 10.0,
               .deadband = 0.001,
               .improvement_flags = 0b01100001,
@@ -73,6 +78,20 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
               .coef_a = 0.05,
               .coef_b = 0.1,
               .output_lpf_rc = 0.0,
+              .derivative_lpf_rc = 0.01,
+          },
+      .roll_balance =
+          {
+              .kp = 20.0,
+              .ki = 3,
+              .kd = 0.2,
+              .max_output = 10.0,
+              .deadband = 0.001,
+              .improvement_flags = 0b01010010,
+              .integral_limit = 10.0,
+              .coef_a = 0.0,
+              .coef_b = 0.0,
+              .output_lpf_rc = 0.01,
               .derivative_lpf_rc = 0.01,
           },
   };

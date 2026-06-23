@@ -1,6 +1,8 @@
 std_msgs/Header header
 float64 body_distance
 float64 body_velocity
+float64 body_roll
+float64 body_roll_rate
 float64 body_pitch
 float64 body_pitch_rate
 float64 body_yaw_rate
