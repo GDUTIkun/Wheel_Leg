@@ -8,6 +8,7 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BodyCommand.msg"
+  "msg/ControlLoopDebug.msg"
   "msg/JointCommand.msg"
   "msg/RcChannelsRaw.msg"
   "msg/RcStatus.msg"

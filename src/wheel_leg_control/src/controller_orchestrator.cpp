@@ -32,9 +32,17 @@ ControllerOrchestrator::ControllerOrchestrator()
               .vmc_algorithm =
                   [this](const VmcStepInput& input) {
                     return vmc_algorithm_.Compute(input);
-                  },
+              },
           },
           DefaultStandControlTargets()) {}
+
+void ControllerOrchestrator::ConfigurePidDefaults(
+    const StandLegacyPidDefaults& defaults) {
+  leglen_pid_l_ = LegacyPidAlgorithm(defaults.leg_length);
+  leglen_pid_r_ = LegacyPidAlgorithm(defaults.leg_length);
+  steer_v_pid_ = LegacyPidAlgorithm(defaults.steer_velocity);
+  anti_crash_pid_ = LegacyPidAlgorithm(defaults.anti_crash);
+}
 
 std::optional<wheel_leg_common::ControlCommand> ControllerOrchestrator::Step(
     double state_time_sec,

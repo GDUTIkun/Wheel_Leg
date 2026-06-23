@@ -81,7 +81,7 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
 inline ControlTargets DefaultStandControlTargets() {
   ControlTargets targets;
   targets.target_leg_length = 0.25;
-  targets.target_phi = DegreesToRadians(90.0);
+  targets.target_phi = DegreesToRadians(97.1);
   return targets;
 }
 

@@ -58,7 +58,7 @@ LqrStateVector BuildLqrTarget(const ControlTargets& targets) {
       0.0,
       targets.target_distance,
       targets.target_velocity,
-      0.0,
+      targets.target_pitch,
       0.0,
   }};
 }

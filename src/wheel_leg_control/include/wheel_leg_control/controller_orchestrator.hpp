@@ -14,6 +14,7 @@ namespace wheel_leg_control {
 class ControllerOrchestrator {
  public:
   ControllerOrchestrator();
+  void ConfigurePidDefaults(const StandLegacyPidDefaults& defaults);
 
   std::optional<wheel_leg_common::ControlCommand> Step(
       double state_time_sec,

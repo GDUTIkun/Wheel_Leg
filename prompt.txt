@@ -1,0 +1,8 @@
+开仿真：
+build/wheel_leg_simulate/wheel_leg_simulate transplant/mujoco_win/model/scence.xml
+开控制器：
+ros2 run wheel_leg_control wheel_leg_controller_node
+遥控输入：
+ros2 run wheel_leg_rc rc_ibus_node
+ros接管：
+ros2 param set /mujoco_bridge enable_ros_command true

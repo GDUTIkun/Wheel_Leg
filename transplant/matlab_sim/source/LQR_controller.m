@@ -8,8 +8,8 @@ Ks=zeros(2,6,length(L0s)); % 存放不同L0对应的K
 Ss = zeros(6,6,length(L0s));
 
 for step=1:length(L0s)
-    A=double(subs(Ja,[theta theta1 xb xb1  phi phi1 L0],[0 0 0 0 0 0 L0s(step)]))
-    B=double(subs(Jb,[theta theta1 xb xb1  phi phi1 L0],[0 0 0 0 0 0 L0s(step)]))
+    A=double(subs(Ja,[theta theta1 xb xb1  phi phi1 L0],[0 0 0 0 0 0 L0s(step)]));
+    B=double(subs(Jb,[theta theta1 xb xb1  phi phi1 L0],[0 0 0 0 0 0 L0s(step)]));
     [A_d, B_d]=c2d(A,B,0.01);
    
     [Ss(:,:,step), ~, Ks(:,:,step)]=dare(A_d,B_d,Q,R);

@@ -11,6 +11,7 @@ struct ControlTargets {
   double target_distance = 0.0;
   double target_leg_length = 0.25;
   double target_phi = 0.0;
+  double target_pitch = 0.0;
 };
 
 struct BodyControlState {
