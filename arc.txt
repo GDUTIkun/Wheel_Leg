@@ -1,0 +1,30 @@
+wheel_leg_project/
+├── ros2_ws/
+│   └── src/
+│       ├── robot_msgs/              # 自定义 ROS2 消息
+│       ├── robot_control/           # 上层控制算法
+│       ├── robot_bringup/           # 启动文件
+│       ├── stm32_bridge/            # 树莓派和 STM32 通信节点
+│       └── mujoco_sim/              # MuJoCo 仿真节点，可选
+│
+├── firmware/
+│   └── stm32/
+│       
+│
+├── sim/
+│   └── mujoco/
+│       ├── models/
+│       ├── scenes/
+│       └── README.md
+│
+├── scripts/
+│   ├── build_host.sh
+│   ├── build_pi.sh
+│   └── flash_stm32.sh
+│
+├── docs/
+│   ├── protocol.md
+│   └── architecture.md
+│
+├── .gitignore
+└── README.md
