@@ -1,0 +1,14 @@
+wheel_leg_robort\heap_4.o: ..\Middle\FreeRTOS\portable\MemMang\heap_4.c
+wheel_leg_robort\heap_4.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdlib.h
+wheel_leg_robort\heap_4.o: D:\Keli5\ARM\ARMCC\Bin\..\include\string.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/FreeRTOS.h
+wheel_leg_robort\heap_4.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stddef.h
+wheel_leg_robort\heap_4.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\heap_4.o: ../Core/Inc/FreeRTOSConfig.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/projdefs.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/portable.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/deprecated_definitions.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/portable/portmacro.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/mpu_wrappers.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/task.h
+wheel_leg_robort\heap_4.o: ../Middle/FreeRTOS/include/list.h

@@ -1,0 +1,17 @@
+wheel_leg_robort\tasks.o: ..\Middle\FreeRTOS\source\tasks.c
+wheel_leg_robort\tasks.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdlib.h
+wheel_leg_robort\tasks.o: D:\Keli5\ARM\ARMCC\Bin\..\include\string.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/FreeRTOS.h
+wheel_leg_robort\tasks.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stddef.h
+wheel_leg_robort\tasks.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\tasks.o: ../Core/Inc/FreeRTOSConfig.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/projdefs.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/portable.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/deprecated_definitions.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/portable/portmacro.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/mpu_wrappers.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/task.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/list.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/timers.h
+wheel_leg_robort\tasks.o: ../Middle/FreeRTOS/include/stack_macros.h
+wheel_leg_robort\tasks.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h

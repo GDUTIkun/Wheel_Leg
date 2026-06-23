@@ -1,0 +1,31 @@
+# Build outputs
+build/
+Debug/
+Release/
+Objects/
+Listings/
+*.o
+*.obj
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+
+# Keil
+*.uvguix.*
+*.uvoptx
+*.uvprojx.bak
+
+# STM32CubeIDE / Eclipse
+.metadata/
+.settings/
+.cproject
+.project
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

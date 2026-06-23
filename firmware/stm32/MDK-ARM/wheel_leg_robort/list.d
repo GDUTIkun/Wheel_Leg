@@ -1,0 +1,12 @@
+wheel_leg_robort\list.o: ..\Middle\FreeRTOS\source\list.c
+wheel_leg_robort\list.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdlib.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/FreeRTOS.h
+wheel_leg_robort\list.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stddef.h
+wheel_leg_robort\list.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\list.o: ../Core/Inc/FreeRTOSConfig.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/projdefs.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/portable.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/deprecated_definitions.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/portable/portmacro.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/mpu_wrappers.h
+wheel_leg_robort\list.o: ../Middle/FreeRTOS/include/list.h

@@ -1,0 +1,9 @@
+wheel_leg_robort\mymath.o: ..\Hardware\mymath.cpp
+wheel_leg_robort\mymath.o: ..\Hardware\mymath.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\limits.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\math.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\float.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdlib.h
+wheel_leg_robort\mymath.o: D:\Keli5\ARM\ARMCC\Bin\..\include\string.h

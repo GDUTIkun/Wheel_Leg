@@ -1,0 +1,10 @@
+wheel_leg_robort\pid.o: ..\Hardware\pid.cpp
+wheel_leg_robort\pid.o: ..\Hardware\pid.h
+wheel_leg_robort\pid.o: ..\Hardware\mymath.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\limits.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\math.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\float.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdlib.h
+wheel_leg_robort\pid.o: D:\Keli5\ARM\ARMCC\Bin\..\include\string.h

@@ -1,0 +1,17 @@
+wheel_leg_robort\bayesfunctions.o: D:/Keli5/Pack/ARM/CMSIS-DSP/1.16.2/Source/BayesFunctions/BayesFunctions.c
+wheel_leg_robort\bayesfunctions.o: D:/Keli5/Pack/ARM/CMSIS-DSP/1.16.2/Source/BayesFunctions/arm_gaussian_naive_bayes_predict_f32.c
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/bayes_functions.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\arm_math_types.h
+wheel_leg_robort\bayesfunctions.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdint.h
+wheel_leg_robort\bayesfunctions.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\ARM\ARMCC\Bin\..\include\string.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\ARM\ARMCC\Bin\..\include\math.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\ARM\ARMCC\Bin\..\include\float.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\ARM\ARMCC\Bin\..\include\limits.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\arm_math_memory.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/none.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/utils.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/statistics_functions.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/basic_math_functions.h
+wheel_leg_robort\bayesfunctions.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/fast_math_functions.h
