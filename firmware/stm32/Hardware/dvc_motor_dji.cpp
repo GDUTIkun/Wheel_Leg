@@ -24,6 +24,79 @@
 
 /* Private function declarations ---------------------------------------------*/
 
+namespace
+{
+static const float kDegToRad = PI / 180.0f;
+
+static float g_left_hip_world_angle = 0.0f;
+static float g_right_hip_world_angle = 0.0f;
+static float g_left_hip_world_omega = 0.0f;
+static float g_right_hip_world_omega = 0.0f;
+
+float NormalizeAnglePositive(float angle)
+{
+    while (angle < 0.0f)
+    {
+        angle += 2.0f * PI;
+    }
+    while (angle >= 2.0f * PI)
+    {
+        angle -= 2.0f * PI;
+    }
+    return angle;
+}
+
+void MapGIM6010AngleToLegFrame(const Enum_Motor_DJI_ID can_id,
+                               const float motor_angle,
+                               const float motor_omega,
+                               float *mapped_angle,
+                               float *mapped_omega)
+{
+    // Calibration from leg_data.txt:
+    // World angle convention: horizontal +X is 0 deg, clockwise is positive.
+    // Vertical downward is 90 deg and vertical upward is 270 deg.
+    // L hip live check: 180/90 deg should become 90/180 deg.
+    // R hip live check: 20/290/200 deg should become 0/90/180 deg.
+    // Knee motors are mounted on hip_link, so knee world angle is:
+    // hip_world_angle + knee_relative_angle + knee_offset.
+    switch (can_id)
+    {
+    case CAN_Motor_ID_0x4E:
+        *mapped_angle = NormalizeAnglePositive(-motor_angle + 127.9028f * kDegToRad);
+        *mapped_omega = -motor_omega;
+        g_left_hip_world_angle = *mapped_angle;
+        g_left_hip_world_omega = *mapped_omega;
+        break;
+    case CAN_Motor_ID_0x2E:
+        *mapped_angle = NormalizeAnglePositive(motor_angle - 238.708f * kDegToRad);
+        *mapped_omega = motor_omega;
+        g_right_hip_world_angle = *mapped_angle;
+        g_right_hip_world_omega = *mapped_omega;
+        break;
+    case CAN_Motor_ID_0x6E:
+    {
+        const float knee_relative_angle = -motor_angle - 69.641f * kDegToRad;
+        *mapped_angle = NormalizeAnglePositive(g_left_hip_world_angle +
+                                               knee_relative_angle);
+        *mapped_omega = g_left_hip_world_omega - motor_omega;
+        break;
+    }
+    case CAN_Motor_ID_0x8E:
+    {
+        const float knee_relative_angle = motor_angle - 69.688f * kDegToRad;
+        *mapped_angle = NormalizeAnglePositive(g_right_hip_world_angle +
+                                               knee_relative_angle);
+        *mapped_omega = g_right_hip_world_omega + motor_omega;
+        break;
+    }
+    default:
+        *mapped_angle = motor_angle;
+        *mapped_omega = motor_omega;
+        break;
+    }
+}
+} // namespace
+
 /* Function prototypes -------------------------------------------------------*/
 
 // TX buffer mapping for current project: FDCAN1 only.
@@ -122,8 +195,14 @@ void Class_Motor_DJI_GIM6010::Data_Process(uint8_t data_id)
                               (static_cast<uint32_t>(tmp_buffer[2]) << 16) |
                               (static_cast<uint32_t>(tmp_buffer[1]) << 8) |
                               static_cast<uint32_t>(tmp_buffer[0]);
-        Rx_Data.Now_Angle = Math_BitsToFloat(angle_bits) / 4.0f * PI - Angle_Offset;//rad
-        Rx_Data.Now_Omega = Math_BitsToFloat((tmp_buffer[7] << 24) | (tmp_buffer[6] << 16) | (tmp_buffer[5] << 8) | tmp_buffer[4])*4*PI/15;//rad/s
+        const float motor_angle =
+            Math_BitsToFloat(angle_bits) / 4.0f * PI - Angle_Offset;
+        const float motor_omega =
+            Math_BitsToFloat((tmp_buffer[7] << 24) | (tmp_buffer[6] << 16) |
+                             (tmp_buffer[5] << 8) | tmp_buffer[4]) *
+            4.0f * PI / 15.0f;
+        MapGIM6010AngleToLegFrame(CAN_Rx_ID, motor_angle, motor_omega,
+                                  &Rx_Data.Now_Angle, &Rx_Data.Now_Omega);
     }
     else if ((data_id & 0x0F) == 0x0C)
     {

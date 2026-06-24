@@ -213,44 +213,64 @@
         <Ww>
           <count>10</count>
           <WinNumber>1</WinNumber>
-          <ItemText>motor_3508_L</ItemText>
+          <ItemText>r_hip_angle</ItemText>
         </Ww>
         <Ww>
           <count>11</count>
           <WinNumber>1</WinNumber>
-          <ItemText>motor_GIM6010_L_B</ItemText>
+          <ItemText>r_knee_angle</ItemText>
         </Ww>
         <Ww>
           <count>12</count>
           <WinNumber>1</WinNumber>
-          <ItemText>motor_GIM6010</ItemText>
+          <ItemText>l_hip_angle</ItemText>
         </Ww>
         <Ww>
           <count>13</count>
           <WinNumber>1</WinNumber>
-          <ItemText>motor_GIM6010_R_1</ItemText>
+          <ItemText>l_knee_angle</ItemText>
         </Ww>
         <Ww>
           <count>14</count>
           <WinNumber>1</WinNumber>
-          <ItemText>motor_GIM6010_L_1</ItemText>
+          <ItemText>l_knee_omega</ItemText>
         </Ww>
         <Ww>
           <count>15</count>
           <WinNumber>1</WinNumber>
-          <ItemText>l</ItemText>
+          <ItemText>r_knee_omega</ItemText>
         </Ww>
         <Ww>
           <count>16</count>
           <WinNumber>1</WinNumber>
-          <ItemText>r</ItemText>
+          <ItemText>l_hip_omega</ItemText>
+        </Ww>
+        <Ww>
+          <count>17</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>r_hip_omega</ItemText>
+        </Ww>
+        <Ww>
+          <count>18</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>r_knee_relative_angle</ItemText>
+        </Ww>
+        <Ww>
+          <count>19</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>l_knee_relative_angle</ItemText>
+        </Ww>
+        <Ww>
+          <count>20</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>knee_limit_flag</ItemText>
         </Ww>
       </WatchWindow1>
       <WatchWindow2>
         <Ww>
           <count>0</count>
           <WinNumber>2</WinNumber>
-          <ItemText>CAN1_0x200_Tx_Data</ItemText>
+          <ItemText>motor_GIM6010_R_knee</ItemText>
         </Ww>
       </WatchWindow2>
       <Tracepoint>

@@ -134,7 +134,7 @@ protected:
     Enum_Motor_DJI_ID CAN_Rx_ID;
     // 发送缓存区
     uint8_t *Tx_Data;
-    // 角度零点偏置, rad
+    // 电机原始角度零点偏置, rad. GIM6010接收后还会按腿部安装方向映射到机构角.
     float Angle_Offset;
 
     // 常量
@@ -303,7 +303,7 @@ inline Enum_Motor_DJI_Status Class_Motor_DJI_GIM6010::Get_Status() const
 }
 
 /**
- * @brief 获取当前的角度, rad
+ * @brief 获取当前的角度, rad. GIM6010返回按腿部标定映射后的机构角.
  *
  * @return float 当前的角度, rad
  */
@@ -313,7 +313,7 @@ inline float Class_Motor_DJI_GIM6010::Get_Now_Angle() const
 }
 
 /**
- * @brief 获取当前的速度, rad/s
+ * @brief 获取当前的速度, rad/s. GIM6010返回按腿部标定映射后的机构角速度.
  *
  * @return float 当前的速度, rad/s
  */

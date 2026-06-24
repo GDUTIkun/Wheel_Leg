@@ -9,6 +9,9 @@ void Car_Init(void);
 
 extern bool init_finished;
 extern double gyx, gyy, gyz, y;
+extern float r_hip_angle, r_knee_angle, l_hip_angle, l_knee_angle;
+extern float r_knee_relative_angle, l_knee_relative_angle;
+extern float r_hip_omega, r_knee_omega, l_hip_omega, l_knee_omega;
+extern uint8_t knee_limit_flag;
 
 #endif
-
