@@ -29,6 +29,6 @@ ROS2 构建产物固定放在 `ros2_ws/` 下：
 ./scripts/run_pi.sh hw
 ```
 
-完整构建和启动归档见：
+完整文档入口见：
 
-- [docs/runbook.md](/home/t/wheel_leg_ws/docs/runbook.md)
+- [docs/README.md](docs/README.md)

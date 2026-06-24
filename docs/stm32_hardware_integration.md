@@ -9,7 +9,7 @@
 ## 2. 当前输入
 
 - 100Hz 仿真可站立基线。
-- `doc/tasks/500hz_to_100hz_balance_notes.md` 中记录的传感器、滤波、LQR 和执行器输出处理原则。
+- `100hz_balance_notes.md` 中记录的传感器、滤波、LQR 和执行器输出处理原则。
 - 已冻结的 RC 遥控输入与 failsafe 链路。
 - 当前 ROS2 控制接口与仿真接口边界。
 - STM32 侧电机、编码器、IMU 和底层安全保护能力。

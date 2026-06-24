@@ -50,10 +50,13 @@ wheel_leg_project/
 │   ├── flash_stm32.sh
 │   └── env.sh
 ├── docs/
+│   ├── README.md
 │   ├── architecture.md
 │   ├── protocol.md
-│   ├── build_profiles.md
-│   └── migration.md
+│   ├── runbook.md
+│   ├── progress.md
+│   ├── stm32_hardware_integration.md
+│   └── 100hz_balance_notes.md
 ├── transplant/
 └── README.md
 ```
@@ -117,8 +120,9 @@ MuJoCo 模型和场景资源区。
 
 职责：
 
-- 维护结构、协议、构建方式、迁移步骤等决策性文档。
-- 将“先文档后重构”的约束收口到可追踪文本中。
+- 维护结构、协议、运行入口、当前进度和当前阶段任务文档。
+- 保留对后续硬件接入仍有直接价值的调参记录。
+- 不再维护旧的 `docs/doc/` 平行规划体系。
 
 ### 4.6 `transplant/`
 
@@ -228,6 +232,6 @@ state source -> /robot_state -> wheel_leg_controller -> /joint_command -> actuat
 
 - 原 `src/` 已迁入 `ros2_ws/src/`
 - 原 `build/ install/ log/` 已迁入 `ros2_ws/`
-- 原 `doc/` 已迁入 `docs/`
+- 旧 `docs/doc/` 拆分文档已清理，当前只保留 `docs/` 根目录主线文档
 
 后续重构应基于本文件继续推进，不再回到“根目录直接堆 ROS2 工作区产物”的方式。

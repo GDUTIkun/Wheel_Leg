@@ -4,9 +4,8 @@
 
 - 迭代编号：`iter-005`
 - 迭代名称：STM32 硬件接入与 100Hz 实机闭环准备
-- 迭代文档：`doc/iterations/iter-005.md`
-- 详细设计：`doc/detail.md`
-- 上一轮验证记录：`doc/validation.md`
+- 当前任务文档：`stm32_hardware_integration.md`
+- 100Hz 仿真基线：`100hz_balance_notes.md`
 
 ## 2. 状态说明
 
@@ -25,7 +24,7 @@
 
 - `[x] 代码已完成` 不等于 `[v] 已通过验证`。
 - 本轮当前是硬件接入准备迭代，允许任务先停留在通信、方向、单位和安全验证阶段，不要求立即完成实机站立。
-- `iter-001` 与 `iter-002` 已完成能力视为当前迭代输入，不在本轮重复验收实现细节。
+- 旧迭代拆分文档已清理，已完成能力只作为当前阶段输入，不在本轮重复验收实现细节。
 
 ## 3. 迭代目标概览
 
@@ -50,15 +49,10 @@
 
 | 模块任务 | 文件 | 当前状态 | 说明 |
 | --- | --- | --- | --- |
-| `rc_ibus_node` 设计任务 | `doc/tasks/rc_ibus_node.md` | `[v] 已通过验证` | 已完成 `/dev/ttyAMA3` 实机 `iBUS` 解包、原始通道发布与状态诊断验证 |
-| 遥控命令映射任务 | `doc/tasks/rc_command_mapping.md` | `[v] 已通过验证` | 已完成真实遥控器通道确认，`/cmd_vel`、`/control_mode`、`/body_cmd` 与 failsafe 映射已实机验证 |
-| 控制算法调参与行为收敛任务 | `doc/tasks/control_tuning.md` | `[v] 已通过验证` | 已冻结仿真遥控控制基线，RC 映射、PID、LQR 与速度/转向/高度参数已归档，可进入 STM32 通信阶段 |
-| 100Hz 平衡切换记录 | `doc/tasks/500hz_to_100hz_balance_notes.md` | `[v] 阶段冻结` | 100Hz 仿真已可稳定站立，参数等待硬件接入后重新小步调整 |
-| STM32 硬件接入任务 | `doc/tasks/stm32_hardware_integration.md` | `[~] 进行中` | 下一阶段主线，先打通通信、状态上报、命令下发、安全停机和方向/单位校验 |
-| 树莓派串口联通性测试节点 | `src/wheel_leg_rc/src/rc_serial_probe_node.cpp` | `[x] 代码已完成` | 已新增 ROS2 串口探测节点，先验证 `/dev/ttyAMA3` 是否收到持续字节流，不依赖 `iBUS` 解包 |
-| 第二阶段详细设计 | `doc/detail.md` | `[~] 文档已更新` | 已新增 `iter-003` 的 `rc_ibus_node` 详细设计章节 |
-| 总体架构更新 | `doc/architecture.md` | `[~] 文档已更新` | 已补充 `rc_ibus_node` 的长期定位和 ROS2 接口边界 |
-| 总需求更新 | `doc/proposal.md` | `[~] 文档已更新` | 已将第二阶段协议收口为 `FS-iA6B + iBUS + /dev/ttyAMA3`，并补前置测试要求 |
+| 遥控输入与命令映射 | `wheel_leg_rc` / `wheel_leg_control` | `[v] 已通过验证` | 已完成真实遥控器通道确认，`/cmd_vel`、`/control_mode`、`/body_cmd` 与 failsafe 映射已实机验证 |
+| 仿真控制参数基线 | `100hz_balance_notes.md` | `[v] 阶段冻结` | 100Hz 仿真已可稳定站立，参数等待硬件接入后重新小步调整 |
+| STM32 硬件接入任务 | `stm32_hardware_integration.md` | `[~] 进行中` | 下一阶段主线，先打通通信、状态上报、命令下发、安全停机和方向/单位校验 |
+| 工程结构与接口约束 | `architecture.md` / `protocol.md` | `[~] 持续维护` | 保留为当前文档入口，不再维护旧 `docs/doc/` 规划体系 |
 
 ## 5. 推荐执行顺序
 
@@ -75,8 +69,8 @@
 
 作为本轮输入，以下内容已存在：
 
-- `iter-001` 已建立 `/joint_states`、`/imu`、`/joint_command` 和 actuator 边界。
-- `iter-002` 已完成控制编排外移、`sim adapter` 收口和 `/robot_state` 正式接口建立。
+- 当前架构已建立 `/joint_states`、`/imu`、`/joint_command` 和 `/robot_state` 边界。
+- 当前控制链已完成控制编排外移、`sim adapter` 收口和 ROS2 接口接入。
 - 当前第二阶段硬件事实已经明确：`FlySky FS-iA6B`、`iBUS`、`/dev/ttyAMA3`、`GPIO8/9`。
 - 当前项目没有地面站，需要在 ROS2 环境中直接完成调参与观察。
 - 当前已完成真实遥控器到仿真控制链联调，`stand`、`velocity`、failsafe 与恢复复控能力已形成冻结仿真控制基线。
