@@ -27,10 +27,12 @@ ament_target_dependencies(stm32_uart_stress_node
   std_msgs
 )
 
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  install(
+    DIRECTORY include/
+    DESTINATION include
+  )
+endif()
 
 install(
   TARGETS wheel_leg_stm32_bridge_node stm32_uart_stress_node
