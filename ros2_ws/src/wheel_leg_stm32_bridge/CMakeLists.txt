@@ -19,15 +19,9 @@ ament_target_dependencies(wheel_leg_stm32_bridge_node
 )
 
 install(
-  DIRECTORY include/
-  DESTINATION include
-)
-
-install(
   TARGETS wheel_leg_stm32_bridge_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_export_dependencies(rclcpp wheel_leg_hw wheel_leg_msgs)
-ament_export_include_directories(include)
 ament_package()
