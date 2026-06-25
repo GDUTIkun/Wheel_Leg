@@ -200,7 +200,27 @@ ROS 侧统一单位：
 - 串口：`USART2`
 - 帧格式：`0xA5 0x5A type len seq_lo seq_hi payload crc_lo crc_hi`
 - CRC：`CRC16-CCITT`，初值 `0xFFFF`，覆盖 `type`、`len`、`seq` 和 `payload`
-- 统计：接收字节数、成功帧数、CRC 错误、长度错误、同步丢失、UART 错误、帧间隔；Keil Watch 可直接观察 `uart2_protocol_test_stats`
+- 下行压测：STM32 中断接收并统计接收字节数、成功帧数、CRC 错误、长度错误、同步丢失、序号跳变、UART 错误、帧间隔；Keil Watch 可直接观察 `uart2_protocol_test_stats`
+- 上行压测：STM32 同时以 `200Hz`（`5ms` 周期）主动回传 `type=0x81` 状态帧，payload 当前固定 `48` 字节，字段顺序如下：
+
+```text
+u32 stm_tick_ms
+u32 rx_bytes
+u32 frames_ok
+u32 crc_errors
+u32 length_errors
+u32 sync_losses
+u32 rx_seq_gaps
+u32 uart_errors
+u16 last_rx_seq
+u8  last_rx_type
+u8  last_rx_len
+u32 min_frame_gap_ms
+u32 max_frame_gap_ms
+u32 last_rx_age_ms
+```
+
+- 编码：所有多字节字段当前都按 little-endian 打包
 - 上位机模拟发送工具：`tools/uart_frame_sender.py`
 - ROS 侧压测节点：`ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_uart_stress_node.cpp`
 

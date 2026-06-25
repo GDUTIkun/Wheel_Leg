@@ -1,5 +1,6 @@
 #include "Car.h"
 #include "uart_protocol_test.h"
+#include <stdio.h>
 
 #define CAR_START_STACK                 128
 #define CAR_START_PRIORITY              1
@@ -225,12 +226,27 @@ void Control_Task(void* pv)
 
 void Debug_Task(void* pv)
 {
-
+    TickType_t last_report_tick = xTaskGetTickCount();
+    UartProtocolTestStats stats = {0};
 
     while(1)
     {
-        const char msg[] = "uart1 test\r\n";
-        HAL_UART_Transmit(&huart1, (uint8_t *)msg, sizeof(msg) - 1, 100);
+        UartProtocolTest_Process();
+
+        const TickType_t now = xTaskGetTickCount();
+        if ((now - last_report_tick) >= pdMS_TO_TICKS(1000))
+        {
+            last_report_tick = now;
+            UartProtocolTest_GetStats(&stats);
+            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu last_rx=%u last_tx=%u\r\n",
+                   (unsigned long)stats.frames_ok,
+                   (unsigned long)stats.crc_errors,
+                   (unsigned long)stats.rx_seq_gaps,
+                   (unsigned long)stats.tx_frames,
+                   (unsigned long)stats.tx_errors,
+                   (unsigned int)stats.last_seq,
+                   (unsigned int)stats.last_tx_seq);
+        }
 
         if(debugflag == 1)
         {
@@ -239,7 +255,7 @@ void Debug_Task(void* pv)
             
             debugflag = 0;
         }
-        vTaskDelay(100);
+        vTaskDelay(1);
     }
 }
 
