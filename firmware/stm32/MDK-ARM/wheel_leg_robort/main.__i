@@ -1,7 +1,0 @@
---cpp -c --cpu Cortex-M7.fp.dp -g -O0 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/STM32H7xx_HAL_Driver/Inc -I ../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I ../Drivers/CMSIS/Include -I ../App -I ../Hardware -I ../Middle/FreeRTOS/include -I ../Middle/FreeRTOS/portable -I ..\Math --diag_suppress=2803,1,1035
--I.\RTE\_wheel_leg_robort
--ID:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include
--ID:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\PrivateInclude
--ID:\Keli5\Pack\ARM\CMSIS\5.9.0\CMSIS\Core\Include
--D__UVISION_VERSION="539" -D_RTE_ -DSTM32H743xx -D_RTE_ -DUSE_PWR_LDO_SUPPLY -DUSE_HAL_DRIVER -DSTM32H743xx -DSTM32H743xx -DARM_MATH_CM7
--o wheel_leg_robort\main.o --omf_browse wheel_leg_robort\main.crf --depend wheel_leg_robort\main.d "..\Core\Src\main.cpp"

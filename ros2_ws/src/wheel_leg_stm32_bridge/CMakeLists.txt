@@ -32,6 +32,15 @@ ament_target_dependencies(stm32_uart_stress_node
   std_msgs
 )
 
+add_executable(joint_command_probe_node
+  src/joint_command_probe_node.cpp
+)
+ament_target_dependencies(joint_command_probe_node
+  rclcpp
+  wheel_leg_hw
+  wheel_leg_msgs
+)
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
   install(
     DIRECTORY include/
@@ -40,7 +49,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
 endif()
 
 install(
-  TARGETS wheel_leg_stm32_bridge_node stm32_uart_stress_node
+  TARGETS wheel_leg_stm32_bridge_node stm32_uart_stress_node joint_command_probe_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

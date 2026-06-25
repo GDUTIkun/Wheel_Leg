@@ -7,6 +7,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     use_stm32_bridge = LaunchConfiguration("use_stm32_bridge")
+    use_controller = LaunchConfiguration("use_controller")
     serial_device = LaunchConfiguration("serial_device")
     baud_rate = LaunchConfiguration("baud_rate")
     state_timeout_sec = LaunchConfiguration("state_timeout_sec")
@@ -18,6 +19,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_stm32_bridge", default_value="true"),
+            DeclareLaunchArgument("use_controller", default_value="true"),
             DeclareLaunchArgument("serial_device", default_value="/dev/ttyAMA4"),
             DeclareLaunchArgument("baud_rate", default_value="921600"),
             DeclareLaunchArgument("state_timeout_sec", default_value="0.1"),
@@ -48,6 +50,7 @@ def generate_launch_description():
                 executable="wheel_leg_controller_node",
                 name="wheel_leg_controller",
                 output="screen",
+                condition=IfCondition(use_controller),
             ),
         ]
     )
