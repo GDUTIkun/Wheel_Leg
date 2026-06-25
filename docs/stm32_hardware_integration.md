@@ -316,7 +316,66 @@ ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
 
 后续若继续修正髋、膝或轮子的方向定义，应优先修改 ROS bridge 的下行力矩符号表，不直接把安装方向差异泄漏到上层控制器。
 
-### 9.10 通过标准
+### 9.10 2026-06-25 RC / Timeout / 状态频率验收记录
+
+本轮补做了通信部分剩余三项验收：`RC ch7` 急停整链、命令超时链路、以及 `/robot_state` `/imu` `/joint_states` 的时间戳与频率检查。
+
+记录如下：
+
+```text
+- 日期：2026-06-25
+- 前提修正：
+  - RC 急停方向改为“高位急停”
+  - estop.active_below 默认值由 true 改为 false
+  - estop.threshold 默认值由 1500.0 调整为 1700.0
+  - rc.launch.py 增加 estop_threshold launch 参数
+  - 曾出现一次 RC 链路异常，现场确认为树莓派供电不足；恢复供电后重测
+  - 曾出现 /rc/status 双发布者污染；清理重复 rc.launch 后按单发布者结果验收
+
+- RC ch7 -> /rc/status.estop_active -> bridge -> STM32 safety_state：
+  - 持续命令下抓到 bridge 状态从 safety=enabled 切换到 safety=estop
+  - 同时 /rc/status.estop_active 与 bridge status_text 中 estop=true 对应变化一致
+  - 该整链硬件验证通过
+
+- 命令超时链路：
+  - 在 estop_active=false 前提下，先持续发送单关节小力矩命令约 3s
+  - bridge status_text 先进入：
+    state=ok state_stale=false command_stale=false command_enable=true safety=enabled estop=false
+  - 停止发送命令后，bridge status_text 回到：
+    state=ok state_stale=false command_stale=true command_enable=true safety=timeout estop=false
+  - 说明 STM32 命令超时保护链路工作正常，该项验收通过
+
+- /robot_state /imu /joint_states 时间戳与频率：
+  - /robot_state:
+    header_dt_mean ≈ 0.01524 s
+    approx_hz ≈ 65.99 Hz
+  - /imu:
+    header_dt_mean ≈ 0.01524 s
+    approx_hz ≈ 65.65 Hz
+  - /joint_states:
+    header_dt_mean ≈ 0.01524 s
+    approx_hz ≈ 65.62 Hz
+  - 当前状态发布频率约 66 Hz，未达到 100 Hz / 0.01 s 目标
+  - 该项结论应记录为“当前口径已测得，但仍需后续优化到 100 Hz 目标”
+
+- RC 链路复查：
+  - 在最终 10s 稳定窗口内：
+    estop_active=false
+    failsafe=false
+    serial_online=true
+    receiver_online=true
+    frame_timeout=false
+  - checksum_error_count 未增长
+  - frame_sync_loss_count 未增长
+```
+
+当前通信部分剩余结论：
+
+- `RC ch7` 急停整链：已验证通过
+- 命令超时链路：已验证通过
+- 状态发布时间戳 / dt / 频率：已测得当前约 `66 Hz`，但尚未达到 `100 Hz`
+
+### 9.11 通过标准
 
 通信完成后的这一步，至少满足以下条件才进入下一阶段：
 

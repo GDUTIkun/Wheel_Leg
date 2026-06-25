@@ -7,11 +7,13 @@ from launch_ros.actions import Node
 def generate_launch_description():
     estop_channel = LaunchConfiguration("estop_channel")
     estop_active_below = LaunchConfiguration("estop_active_below")
+    estop_threshold = LaunchConfiguration("estop_threshold")
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("estop_channel", default_value="7"),
-            DeclareLaunchArgument("estop_active_below", default_value="true"),
+            DeclareLaunchArgument("estop_active_below", default_value="false"),
+            DeclareLaunchArgument("estop_threshold", default_value="1700.0"),
             Node(
                 package="wheel_leg_rc",
                 executable="rc_ibus_node",
@@ -21,6 +23,7 @@ def generate_launch_description():
                     {
                         "estop.channel": estop_channel,
                         "estop.active_below": estop_active_below,
+                        "estop.threshold": estop_threshold,
                     }
                 ],
             ),

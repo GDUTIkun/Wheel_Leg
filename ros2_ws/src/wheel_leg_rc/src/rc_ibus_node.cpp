@@ -111,9 +111,9 @@ class RcIbusNode : public rclcpp::Node {
     mode_high_label_ =
         declare_parameter<std::string>("control_mode.high_label", "velocity");
     estop_channel_ = declare_parameter<int>("estop.channel", 7);
-    estop_threshold_ = declare_parameter<double>("estop.threshold", 1500.0);
+    estop_threshold_ = declare_parameter<double>("estop.threshold", 1700.0);
     estop_active_below_ =
-        declare_parameter<bool>("estop.active_below", true);
+        declare_parameter<bool>("estop.active_below", false);
     estop_mode_label_ =
         declare_parameter<std::string>("estop.mode_label", "disabled");
     safe_control_mode_ =
