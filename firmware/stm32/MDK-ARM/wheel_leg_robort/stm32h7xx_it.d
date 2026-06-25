@@ -47,3 +47,5 @@ wheel_leg_robort\stm32h7xx_it.o: ../Middle/FreeRTOS/portable/portmacro.h
 wheel_leg_robort\stm32h7xx_it.o: ../Middle/FreeRTOS/include/mpu_wrappers.h
 wheel_leg_robort\stm32h7xx_it.o: ../Middle/FreeRTOS/include/task.h
 wheel_leg_robort\stm32h7xx_it.o: ../Middle/FreeRTOS/include/list.h
+wheel_leg_robort\stm32h7xx_it.o: ../Core/Inc/usart.h
+wheel_leg_robort\stm32h7xx_it.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h

@@ -32,6 +32,7 @@
 "wheel_leg_robort\tasks.o"
 "wheel_leg_robort\timers.o"
 "wheel_leg_robort\main.o"
+"wheel_leg_robort\dma.o"
 "wheel_leg_robort\gpio.o"
 "wheel_leg_robort\fdcan.o"
 "wheel_leg_robort\memorymap.o"

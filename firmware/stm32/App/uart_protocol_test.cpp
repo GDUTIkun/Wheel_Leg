@@ -46,9 +46,7 @@ extern Class_Motor_DJI_GIM6010 motor_GIM6010_R_hip;
 extern Class_Motor_DJI_GIM6010 motor_GIM6010_R_knee;
 
 extern "C" {
-volatile UartProtocolTestStats uart2_protocol_test_stats = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0u, 0xFFFFFFFFu, 0u, 0u, 0u, 0u, 0u
-};
+volatile UartProtocolTestStats uart2_protocol_test_stats = {};
 }
 
 namespace {
@@ -88,6 +86,9 @@ uint32_t g_last_status_tick_ms = 0u;
 uint8_t g_payload[kMaxPayloadLen] = {0};
 uint8_t g_status_frame[2 + 4 + sizeof(StatePayload) + 2] = {0};
 StatePayload g_state_payload = {};
+volatile uint8_t g_tx_in_flight = 0u;
+uint16_t g_tx_frame_len = 0u;
+uint16_t g_tx_in_flight_seq = 0u;
 float g_target_efforts[kJointCount] = {0.0f};
 float g_applied_efforts[kJointCount] = {0.0f};
 uint8_t g_command_enable = 0u;
@@ -509,33 +510,28 @@ void TrySendStatusFrame()
     WriteU16Le(g_status_frame + crc_index, crc);
 
     const uint16_t frame_len = static_cast<uint16_t>(crc_index + 2u);
-    bool rx_was_running = false;
-    if (huart2.RxState == HAL_UART_STATE_BUSY_RX) {
-        rx_was_running = true;
-        uart2_protocol_test_stats.tx_abort_rx_count++;
-        HAL_UART_AbortReceive_IT(&huart2);
+    if (g_tx_in_flight != 0u) {
+        uart2_protocol_test_stats.tx_skip_in_flight++;
+        return;
     }
 
+    g_tx_in_flight = 1u;
+    g_tx_frame_len = frame_len;
+    g_tx_in_flight_seq = g_tx_seq;
     const HAL_StatusTypeDef tx_status =
-        HAL_UART_Transmit(&huart2, g_status_frame, frame_len, 20);
+        HAL_UART_Transmit_DMA(&huart2, g_status_frame, frame_len);
     uart2_protocol_test_stats.last_tx_uart_isr = huart2.Instance->ISR;
     uart2_protocol_test_stats.last_tx_uart_cr1 = huart2.Instance->CR1;
     uart2_protocol_test_stats.last_tx_uart_cr3 = huart2.Instance->CR3;
 
-    if (rx_was_running) {
-        RestartReceive();
-    }
-
     if (tx_status == HAL_OK) {
-        uart2_protocol_test_stats.tx_frames++;
-        uart2_protocol_test_stats.tx_bytes += frame_len;
-        uart2_protocol_test_stats.last_tx_seq = g_tx_seq;
-        uart2_protocol_test_stats.last_tx_hal_status = static_cast<uint8_t>(HAL_OK);
+        uart2_protocol_test_stats.last_tx_hal_status =
+            static_cast<uint8_t>(HAL_OK);
         uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(&huart2);
         uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart2.gState);
         uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart2.RxState);
-        g_tx_seq = static_cast<uint16_t>(g_tx_seq + 1u);
     } else {
+        g_tx_in_flight = 0u;
         uart2_protocol_test_stats.tx_errors++;
         uart2_protocol_test_stats.last_tx_hal_status =
             static_cast<uint8_t>(tx_status);
@@ -559,6 +555,9 @@ extern "C" void UartProtocolTest_Init(void)
     ResetParser();
     UartProtocolTest_ResetStats();
     g_tx_seq = 0u;
+    g_tx_in_flight = 0u;
+    g_tx_frame_len = 0u;
+    g_tx_in_flight_seq = 0u;
     g_last_status_tick_ms = HAL_GetTick();
     g_last_valid_command_tick_ms = 0u;
     g_command_enable = 0u;
@@ -612,6 +611,7 @@ extern "C" void UartProtocolTest_GetStats(UartProtocolTestStats *out)
     out->last_tx_uart_isr = uart2_protocol_test_stats.last_tx_uart_isr;
     out->last_tx_uart_cr1 = uart2_protocol_test_stats.last_tx_uart_cr1;
     out->last_tx_uart_cr3 = uart2_protocol_test_stats.last_tx_uart_cr3;
+    out->tx_skip_in_flight = uart2_protocol_test_stats.tx_skip_in_flight;
     __enable_irq();
 }
 
@@ -646,6 +646,7 @@ extern "C" void UartProtocolTest_ResetStats(void)
     uart2_protocol_test_stats.last_tx_uart_isr = 0u;
     uart2_protocol_test_stats.last_tx_uart_cr1 = 0u;
     uart2_protocol_test_stats.last_tx_uart_cr3 = 0u;
+    uart2_protocol_test_stats.tx_skip_in_flight = 0u;
     __enable_irq();
 }
 
@@ -723,9 +724,40 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     }
 }
 
+extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART2) {
+        g_tx_in_flight = 0u;
+        uart2_protocol_test_stats.tx_frames++;
+        uart2_protocol_test_stats.tx_bytes += g_tx_frame_len;
+        uart2_protocol_test_stats.last_tx_seq = g_tx_in_flight_seq;
+        uart2_protocol_test_stats.last_tx_hal_status = static_cast<uint8_t>(HAL_OK);
+        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(huart);
+        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart->gState);
+        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart->RxState);
+        uart2_protocol_test_stats.last_tx_uart_isr = huart->Instance->ISR;
+        uart2_protocol_test_stats.last_tx_uart_cr1 = huart->Instance->CR1;
+        uart2_protocol_test_stats.last_tx_uart_cr3 = huart->Instance->CR3;
+        g_tx_seq = static_cast<uint16_t>(g_tx_in_flight_seq + 1u);
+    }
+}
+
 extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2) {
+        if (g_tx_in_flight != 0u) {
+            g_tx_in_flight = 0u;
+            uart2_protocol_test_stats.tx_errors++;
+            uart2_protocol_test_stats.tx_hal_error_errors++;
+            uart2_protocol_test_stats.last_tx_hal_status =
+                static_cast<uint8_t>(HAL_ERROR);
+            uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(huart);
+            uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart->gState);
+            uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart->RxState);
+            uart2_protocol_test_stats.last_tx_uart_isr = huart->Instance->ISR;
+            uart2_protocol_test_stats.last_tx_uart_cr1 = huart->Instance->CR1;
+            uart2_protocol_test_stats.last_tx_uart_cr3 = huart->Instance->CR3;
+        }
         uart2_protocol_test_stats.uart_errors++;
         __HAL_UART_CLEAR_OREFLAG(huart);
         RestartReceive();

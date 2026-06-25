@@ -37,6 +37,7 @@ typedef struct
     uint32_t last_tx_uart_isr;
     uint32_t last_tx_uart_cr1;
     uint32_t last_tx_uart_cr3;
+    uint32_t tx_skip_in_flight;
 } UartProtocolTestStats;
 
 extern volatile UartProtocolTestStats uart2_protocol_test_stats;

@@ -1,28 +1,62 @@
 #include "jy901s.h"
 
-void JY901S_Acc(double* accx, double* accy, double* accz)
+static const uint8_t kSnapshotStartReg = AX;
+static const uint16_t kSnapshotByteCount = 24u;
+static const float kAccScale = 0.0004883f;
+static const float kGyroScale = 0.061035f;
+static const float kAngleScale = 0.0054932f;
+
+static int16_t ReadI16Le(const uint8_t *buf, uint16_t offset)
 {
-    *accx = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x34)*0.0004883;
-    *accy = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x35)*0.0004883;
-    *accz = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x36)*0.0004883;
+    return (int16_t)((uint16_t)buf[offset] | ((uint16_t)buf[offset + 1u] << 8));
 }
 
-void JY901S_Gyro(double* gyx, double* gyy, double* gyz, double* y)
+void JY901S_ReadSnapshot(JY901SSnapshot *snapshot)
 {
-    *gyx = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x37)*0.061035;
-    *gyy = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x38)*0.061035;
-    *gyz = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x39)*0.061035;
-    *y += *gyz*0.005;
+    uint8_t raw[kSnapshotByteCount] = {0};
+
+    if (snapshot == 0) {
+        return;
+    }
+
+    I2C_ReadRegs(JY901SADDRESSS, kSnapshotStartReg, raw, kSnapshotByteCount);
+
+    snapshot->accx = (float)ReadI16Le(raw, 0u) * kAccScale;
+    snapshot->accy = (float)ReadI16Le(raw, 2u) * kAccScale;
+    snapshot->accz = (float)ReadI16Le(raw, 4u) * kAccScale;
+    snapshot->gyx = (float)ReadI16Le(raw, 6u) * kGyroScale;
+    snapshot->gyy = (float)ReadI16Le(raw, 8u) * kGyroScale;
+    snapshot->gyz = (float)ReadI16Le(raw, 10u) * kGyroScale;
+    snapshot->roll = (float)ReadI16Le(raw, 18u) * kAngleScale;
+    snapshot->pitch = (float)ReadI16Le(raw, 20u) * kAngleScale;
+    snapshot->yaw = (float)ReadI16Le(raw, 22u) * kAngleScale;
+}
+
+void JY901S_Acc(volatile float* accx, volatile float* accy, volatile float* accz)
+{
+    JY901SSnapshot snapshot = {0};
+    JY901S_ReadSnapshot(&snapshot);
+    *accx = snapshot.accx;
+    *accy = snapshot.accy;
+    *accz = snapshot.accz;
+}
+
+void JY901S_Gyro(volatile float* gyx, volatile float* gyy, volatile float* gyz, volatile float* yaw)
+{
+    JY901SSnapshot snapshot = {0};
+    JY901S_ReadSnapshot(&snapshot);
+    *gyx = snapshot.gyx;
+    *gyy = snapshot.gyy;
+    *gyz = snapshot.gyz;
+    *yaw += *gyz * 0.005f;
 }
 //*1.2414
 
-void JY901S_Angle(double* roll, double* pitch, double* yaw)
+void JY901S_Angle(volatile float* roll, volatile float* pitch)
 {
-    *roll = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x3d)*0.0054932;
-    *pitch = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x3e)*0.0054932;
-    *yaw = (double)(int16_t)I2C_ReadReg(JY901SADDRESSS, 0x3f)*0.0054932;
+    JY901SSnapshot snapshot = {0};
+    JY901S_ReadSnapshot(&snapshot);
+    *roll = snapshot.roll;
+    *pitch = snapshot.pitch;
 }
-
-
-
 

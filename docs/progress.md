@@ -95,6 +95,7 @@
 - `2026-06-25` 已完成 Raspberry Pi UART4 与 STM32 USART2 的首轮 5 秒双向联调：ROS 侧可稳定解出 `type=0x81` 状态帧，ROS 下行发送无 `write_errors`/`partial_writes`，复测窗口内 STM32 新增 `crc_errors`、`length_errors`、`sync_losses`、`uart_errors` 均为 `0`。
 - 首次失败原因已确认是未共地；补上 `Raspberry Pi GND -- STM32 GND` 后通信恢复正常。
 - `2026-06-25` 随后又定位到正式状态帧发送异常的根因收敛为：`USART2` 上持续 `HAL_UART_Receive_IT(..., 1)` 与阻塞式 `HAL_UART_Transmit()` 组合会导致发送侧稳定 `HAL_TIMEOUT`；加入“发送前 `HAL_UART_AbortReceive_IT()`、发送后重启接收”的联调绕过后，STM32 上行 `tx_err` 清零且状态帧恢复稳定发送。
+- `2026-06-26` 继续实测后确认，当前把状态发送挂入 `Data_Task` 后单轮循环耗时约 `5.58ms`，已经超过 `5ms` 周期预算；当前主优化方向固定为两项：`USART2` 状态帧改为 DMA/中断非阻塞发送，以及 `JY901S` 从 `0x34~0x3F` 连续寄存器块读替代 9 次分散软件 I2C 读取。
 - 当前剩余卡点已转移到 ROS/树莓派到 STM32 的下行命令接收链路；此时 `tx` 可持续增长，但 `rx_ok`、`last_rx` 仍可能保持为 `0`，需继续核对串口设备名、接线、发送时机与接收统计。
 - 后续仍建议补一轮更长时间窗口测试，继续观察 `rx_seq_gaps` 是否偶发增长。
 - 待确认 STM32 上传的编码器、IMU、电机反馈可以稳定映射到 ROS2 状态接口。

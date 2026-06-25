@@ -114,7 +114,7 @@ void Car_Start(void* pv)
 执行的任务
 ==============================================*/
 
-volatile float gyx, gyy, gyz, y;
+volatile float gyx, gyy, gyz;
 volatile float accx, accy, accz;
 volatile float imu_roll, imu_pitch, imu_yaw;
 
@@ -124,31 +124,20 @@ void Data_Task(void* pv)
     
     while(1)
     {
-        double accx_raw = 0.0;
-        double accy_raw = 0.0;
-        double accz_raw = 0.0;
-        double gyx_raw = 0.0;
-        double gyy_raw = 0.0;
-        double gyz_raw = 0.0;
-        double y_raw = static_cast<double>(y);
-        double imu_roll_raw = 0.0;
-        double imu_pitch_raw = 0.0;
-        double imu_yaw_raw = 0.0;
+        JY901SSnapshot imu_snapshot = {0};
+        JY901S_ReadSnapshot(&imu_snapshot);
+        accx = imu_snapshot.accx;
+        accy = imu_snapshot.accy;
+        accz = imu_snapshot.accz;
+        gyx = imu_snapshot.gyx;
+        gyy = imu_snapshot.gyy;
+        gyz = imu_snapshot.gyz;
+        imu_roll = imu_snapshot.roll;
+        imu_pitch = imu_snapshot.pitch;
+        imu_yaw += imu_snapshot.gyz * 0.005f;
 
-        JY901S_Acc(&accx_raw, &accy_raw, &accz_raw);
-        JY901S_Gyro(&gyx_raw, &gyy_raw, &gyz_raw, &y_raw);
-        JY901S_Angle(&imu_roll_raw, &imu_pitch_raw, &imu_yaw_raw);
-
-        accx = static_cast<float>(accx_raw);
-        accy = static_cast<float>(accy_raw);
-        accz = static_cast<float>(accz_raw);
-        gyx = static_cast<float>(gyx_raw);
-        gyy = static_cast<float>(gyy_raw);
-        gyz = static_cast<float>(gyz_raw);
-        y = static_cast<float>(y_raw);
-        imu_roll = static_cast<float>(imu_roll_raw);
-        imu_pitch = static_cast<float>(imu_pitch_raw);
-        imu_yaw = static_cast<float>(imu_yaw_raw);
+        // Drive UART state transmission from the 5 ms absolute-period data task.
+        UartProtocolTest_Process();
 
         xTaskNotifyGive(control_task_handle);//给控制任务通知
         xTaskDelayUntil(&pxPreviousWakeTime, 5);
@@ -237,7 +226,6 @@ void Motor_Check_Task(void* pv)
     }
 }
 
-
 void Control_Task(void* pv)
 {
     while(1)
@@ -246,7 +234,6 @@ void Control_Task(void* pv)
     }
 }
 
-
 void Debug_Task(void* pv)
 {
     TickType_t last_report_tick = xTaskGetTickCount();
@@ -254,14 +241,14 @@ void Debug_Task(void* pv)
 
     while(1)
     {
-        UartProtocolTest_Process();
-
         const TickType_t now = xTaskGetTickCount();
         if ((now - last_report_tick) >= pdMS_TO_TICKS(1000))
         {
+            DMA_Stream_TypeDef *const usart2_tx_dma =
+                (DMA_Stream_TypeDef *)hdma_usart2_tx.Instance;
             last_report_tick = now;
             UartProtocolTest_GetStats(&stats);
-            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu busy=%lu to=%lu herr=%lu abort_rx=%lu tx_st=%u tx_ec=%lu g=%u rxs=%u isr=%08lx cr1=%08lx cr3=%08lx last_rx=%u last_tx=%u\r\n",
+            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu busy=%lu to=%lu herr=%lu abort_rx=%lu tx_st=%u tx_ec=%lu g=%u rxs=%u isr=%08lx cr1=%08lx cr3=%08lx last_rx=%u last_tx=%u dma_st=%u ndtr=%lu dcr=%08lx dfcr=%08lx lisr=%08lx hisr=%08lx mux=%08lx hdmatx=%08lx parent=%08lx skip=%lu\r\n",
                    (unsigned long)stats.frames_ok,
                    (unsigned long)stats.crc_errors,
                    (unsigned long)stats.rx_seq_gaps,
@@ -279,7 +266,17 @@ void Debug_Task(void* pv)
                    (unsigned long)stats.last_tx_uart_cr1,
                    (unsigned long)stats.last_tx_uart_cr3,
                    (unsigned int)stats.last_seq,
-                   (unsigned int)stats.last_tx_seq);
+                   (unsigned int)stats.last_tx_seq,
+                   (unsigned int)hdma_usart2_tx.State,
+                   (unsigned long)usart2_tx_dma->NDTR,
+                   (unsigned long)usart2_tx_dma->CR,
+                   (unsigned long)usart2_tx_dma->FCR,
+                   (unsigned long)DMA1->LISR,
+                   (unsigned long)DMA1->HISR,
+                   (unsigned long)DMAMUX1_Channel1->CCR,
+                   (unsigned long)huart2.hdmatx,
+                   (unsigned long)hdma_usart2_tx.Parent,
+                   (unsigned long)stats.tx_skip_in_flight);
         }
 
         if(debugflag == 1)

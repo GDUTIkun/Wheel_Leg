@@ -8,14 +8,26 @@
 extern "C" {
 #endif
 
-void JY901S_Acc(double* accx, double* accy, double* accz);
-//void JY901S_Gyro(double* gyx, double* gyy, double* gyz);
-void JY901S_Gyro(double* gyx, double* gyy, double* gyz, double* y);
-void JY901S_Angle(double* roll, double* pitch, double* yaw);
+typedef struct
+{
+    float accx;
+    float accy;
+    float accz;
+    float gyx;
+    float gyy;
+    float gyz;
+    float roll;
+    float pitch;
+    float yaw;
+} JY901SSnapshot;
+
+void JY901S_ReadSnapshot(JY901SSnapshot *snapshot);
+void JY901S_Acc(volatile float* accx, volatile float* accy, volatile float* accz);
+void JY901S_Gyro(volatile float* gyx, volatile float* gyy, volatile float* gyz, volatile float* yaw);
+void JY901S_Angle(volatile float* roll, volatile float* pitch);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-

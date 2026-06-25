@@ -34,10 +34,9 @@ extern "C" {
 /* USER CODE END Includes */
 
 extern UART_HandleTypeDef huart1;
-
 extern UART_HandleTypeDef huart2;
-
 extern UART_HandleTypeDef huart3;
+extern DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN Private defines */
 
@@ -56,4 +55,3 @@ void MX_USART3_UART_Init(void);
 #endif
 
 #endif /* __USART_H__ */
-

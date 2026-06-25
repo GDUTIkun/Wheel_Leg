@@ -9,7 +9,7 @@
 void Car_Init(void);
 
 extern bool init_finished;
-extern volatile float gyx, gyy, gyz, y;
+extern volatile float gyx, gyy, gyz;
 extern volatile float accx, accy, accz;
 extern volatile float imu_roll, imu_pitch, imu_yaw;
 extern float r_hip_angle, r_knee_angle, l_hip_angle, l_knee_angle;

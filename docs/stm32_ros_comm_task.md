@@ -243,11 +243,150 @@ u32 can_error_count
 - CAN 电机掉线、串口异常、failsafe 时，对应状态字段可观测。
 - 控制器仍只依赖 `/robot_state` 和 `/joint_command`，不直接依赖 STM32 协议细节。
 
-## 10. 树莓派 UART4 压测步骤
+## 10. 当前 200Hz 状态上报瓶颈与优化方案
+
+`2026-06-26` 的最新实测表明，STM32 侧把状态发送挂到 `Data_Task` 的 `5ms` 绝对周期后，单轮循环耗时约为 `5.58ms`。这意味着：
+
+- `Data_Task` 自身已经超过 `5ms` 预算。
+- `xTaskDelayUntil(..., 5)` 基本不会真实阻塞。
+- 高优先级 `Data_Task` 会持续追赶节拍，低优先级任务更难获得 CPU。
+- 当前问题已经从“调度位置不对”进一步收敛为“任务体本身太慢”。
+
+### 10.1 当前主要耗时来源
+
+当前确认有两块会直接挤占 `Data_Task` 周期预算：
+
+1. 阻塞式 UART 状态帧发送
+
+- 文件：`firmware/stm32/App/uart_protocol_test.cpp`
+- 现状：状态帧发送使用 `HAL_UART_Transmit(&huart2, ...)`
+- 问题：该调用是同步阻塞的，发送 `136` 字节左右状态帧时，任务会一直卡住直到发送完成或超时
+- 影响：在 `921600 8N1` 下，单帧线速时间接近 `1.5ms`，这是 `5ms` 预算里最硬的一段阻塞
+
+2. 软件 I2C 分散读取 IMU 寄存器
+
+- 文件：`firmware/stm32/Hardware/MyI2C.c`
+- 现状：`JY901S_Acc()`、`JY901S_Gyro()`、`JY901S_Angle()` 会分别多次调用 `I2C_ReadReg()`
+- 问题：当前从 `0x34` 到 `0x3F` 的连续寄存器区间，被拆成 9 次独立 16 位寄存器读取
+- 影响：每次 `I2C_ReadReg()` 都要走完整的 `start + address + reg + repeated start + read + stop` 流程；而软件 I2C 的 `SCL/SDA` 翻转还带 `Delay_us(1)`，累计开销明显
+
+### 10.2 UART 发送优化方案
+
+目标是把状态帧发送从“阻塞任务”改成“后台发送”，优先释放 `Data_Task` 的 CPU 占用。
+
+建议方案：
+
+1. 为 `USART2` 增加 TX DMA 通道
+
+- 当前 `usart.c` 已初始化 `USART2` 和中断，但还没有为 `huart2` 绑定 DMA handle
+- 需要补 `DMA_HandleTypeDef`
+- 需要在 `HAL_UART_MspInit()` 中完成 DMA 初始化和 `__HAL_LINKDMA(&huart2, hdmatx, ...)`
+- 需要补充对应 DMA IRQ
+
+2. 将状态帧发送接口从阻塞发送改为非阻塞发送
+
+- 首选：`HAL_UART_Transmit_DMA(&huart2, ...)`
+- 过渡备选：`HAL_UART_Transmit_IT(&huart2, ...)`
+
+3. 增加发送中的状态位，避免重入
+
+- 增加类似 `g_tx_in_flight` 的标志
+- 若上一帧尚未发送完成，本轮 `5ms` 周期直接跳过，避免多个发送重叠
+- 统计跳过次数，便于后续评估链路余量
+
+4. 将发送成功统计改到发送完成回调中
+
+- 当前 `tx_frames`、`last_tx_seq` 等统计是在 `HAL_UART_Transmit()` 返回成功后立即更新
+- 改为 DMA/IT 后，应在 `HAL_UART_TxCpltCallback()` 中确认本帧真正发完，再更新统计和序号
+
+5. 避免发送时中断接收链路
+
+- 当前实现为了绕过同步发送冲突，会在发送前 `HAL_UART_AbortReceive_IT()`，发送后再 `RestartReceive()`
+- 如果改成 DMA/IT 发送，这种做法会让收发耦合更深，也更容易引入丢字节
+- 更推荐保留 RX 中断持续工作，仅对 TX 帧缓冲做最小保护
+
+预期收益：
+
+- 直接去掉 `Data_Task` 里约 `1.5ms` 的同步串口阻塞
+- 把状态帧发送的实际占用转为 DMA/中断后台完成
+- 为 `5ms` 周期重新腾出最关键的一块预算
+
+### 10.3 IMU 读取优化方案
+
+目标是把当前“多次独立寄存器访问”压缩成“一次连续块读”，减少软件 I2C 事务数。
+
+建议方案：
+
+1. 在 `MyI2C` 层新增连续读接口
+
+建议增加类似接口：
+
+```c
+void I2C_ReadRegs(uint8_t address, uint8_t start_reg, uint8_t *buf, uint16_t len);
+```
+
+行为要求：
+
+- 先发送设备地址和起始寄存器地址
+- 再 repeated start 切到读模式
+- 连续读取 `len` 个字节
+- 前 `len - 1` 个字节发送 ACK，最后 1 个字节发送 NACK
+- 最后 `stop`
+
+2. 在 `JY901S` 层新增一次性快照读取接口
+
+建议增加类似接口：
+
+```c
+void JY901S_ReadSnapshot(...);
+```
+
+或直接一次性填充 `acc/gyro/angle` 九个量。
+
+3. 直接读取 `0x34` 到 `0x3F`
+
+这段地址本来就是连续区间：
+
+- `0x34~0x36`：加速度
+- `0x37~0x39`：角速度
+- `0x3D~0x3F`：姿态角
+
+当前实现虽然只实际使用其中部分寄存器，但先按整段连续读更简单稳妥。即使中间顺带读到未使用字段，也通常比多次小事务更省时。
+
+4. 在任务里只做一次解析
+
+- 连续读得到一段原始字节缓存
+- 由 `JY901S` 层统一组合高低字节并完成比例换算
+- `Data_Task` 只调用一次读取函数，不再逐项访问
+
+预期收益：
+
+- 明显减少 `start/stop/repeated-start` 次数
+- 明显减少 `Delay_us(1)` 造成的累计开销
+- 让 IMU 采样耗时从“多次小阻塞”收敛为“一次较短阻塞”
+
+### 10.4 建议实施顺序
+
+优先顺序建议固定为：
+
+1. 先做 `USART2 TX DMA/IT`
+- 这是当前最确定、最直接的减时项
+
+2. 再做 `JY901S` 连续读
+- 这是第二个主要耗时来源，也是让 `Data_Task` 真正回到 `5ms` 内的关键项
+
+3. 两项完成后重新复测
+- 记录 `Data_Task` 单轮耗时
+- 记录 `200Hz` 状态帧是否稳定
+- 记录 `tx_errors`、`crc_errors`、`sync_losses`、`rx_seq_gaps`
+
+如果两项完成后 `Data_Task` 仍明显超过 `5ms`，再考虑把状态发送彻底挪出 `Data_Task`，单独放入独立 `State_Tx_Task`。
+
+## 11. 树莓派 UART4 压测步骤
 
 本阶段建议用树莓派 UART4 对接 STM32 USART2，在树莓派/ROS 环境里跑协议帧压测。目标是先确认物理串口链路、波特率和两侧手动解包稳定，再接入正式 `wheel_leg_stm32_bridge`。
 
-### 10.1 接线
+### 11.1 接线
 
 按 UART 交叉连接：
 
@@ -706,3 +845,62 @@ uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1717 tx_err=0 busy=0 to=0 herr=0 abort_rx=171
 - 当前 `USART2` 上行状态发送恢复正常。
 - 当前仍待继续排查 ROS/树莓派到 STM32 的下行命令接收链路。
 - 当前“发送前 abort 接收、发送后重启接收”方案只作为联调阶段临时绕过，不建议直接作为最终正式实现。
+
+### 10.5 `2026-06-26` 当晚继续跟进后的最终根因与修复
+
+在继续把阻塞发送改为 `HAL_UART_Transmit_DMA(&huart2, ...)` 后，现场日志一度表现为：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=0 ... g=33 rxs=34 ... cr3=00000081 ... skip=1999
+```
+
+后续又补充了 DMA/DMAMUX 诊断字段，典型样例如下：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=0 ... g=33 rxs=34 ... cr3=00000081 ...
+dma_st=2 ndtr=0 dcr=00000000 dfcr=00000000 lisr=00000000 hisr=00000000 mux=0000002c hdmatx=24006930 parent=24006808 skip=2199
+```
+
+这组数据说明：
+
+- `g=33` 对应 `HAL_UART_STATE_BUSY_TX`，`rxs=34` 对应 `HAL_UART_STATE_BUSY_RX`。
+- `skip` 持续增长，说明第一帧 DMA 发送请求发起后，`g_tx_in_flight` 长期没有被发送完成回调清零。
+- 但 `ndtr=0`、`dcr=0`、`lisr=0`、`hisr=0` 又表明 DMA stream 自身并没有真正进入工作状态。
+- `hdmatx` 和 `parent` 都非零，说明 `__HAL_LINKDMA()` 已经生效，不是 UART handle 没绑 DMA。
+
+最终根因不是协议内容，也不是 `HAL_UART_Transmit_DMA()` 本身，而是 **实际参与构建的工程入口已经从 CubeMX 默认的 `main.c` 切到了自定义 `main.cpp`，但 `main.cpp` 没有同步调用 `MX_DMA_Init()`；同时 Keil 工程文件里也没有把 `dma.c` 编进目标**。
+
+核对结果如下：
+
+- Keil 工程实际入口文件：`firmware/stm32/Core/Src/main.cpp`
+- `main.cpp` 原始版本初始化了 `GPIO/FDCAN/USART/TIM`，但没有调用 `MX_DMA_Init()`
+- `firmware/stm32/MDK-ARM/wheel_leg_robort.uvprojx` 初始状态也未收录 `../Core/Src/dma.c`
+
+最终修复内容：
+
+1. 在 `firmware/stm32/Core/Src/main.cpp` 中补 `#include "dma.h"`。
+2. 在外设初始化序列中补 `MX_DMA_Init();`，再初始化 `USART2`。
+3. 在 `firmware/stm32/MDK-ARM/wheel_leg_robort.uvprojx` / `.uvoptx` 中把 `../Core/Src/dma.c` 正式加入工程。
+4. 保留 `USART2_IRQHandler() -> HAL_UART_IRQHandler(&huart2)`，保证 DMA 发送完成后的 UART `TC` 收尾中断能进入 HAL。
+5. 当前 HAL 版本里没有 `__HAL_RCC_DMAMUX1_CLK_ENABLE()` 宏，因此不要额外保留这行；本版本按 `MX_DMA_Init()` 中现有 `__HAL_RCC_DMA1_CLK_ENABLE()` 工作即可。
+
+应用最终修复后的上行日志样例：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1799 tx_err=0 busy=0 to=0 herr=0 abort_rx=0 tx_st=0 tx_ec=0 g=33 rxs=34 isr=00600010 cr1=0000002d cr3=00000081 last_rx=0 last_tx=1798 dma_st=2 ndtr=130 dcr=0010045f dfcr=00000000 lisr=00000000 hisr=00000000 mux=0000002c hdmatx=24006930 parent=24006808 skip=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1999 tx_err=0 busy=0 to=0 herr=0 abort_rx=0 tx_st=0 tx_ec=0 g=33 rxs=34 isr=00600010 cr1=0000002d cr3=00000081 last_rx=0 last_tx=1998 dma_st=2 ndtr=129 dcr=0010045f dfcr=00000000 lisr=00000000 hisr=00000000 mux=0000002c hdmatx=24006930 parent=24006808 skip=0
+```
+
+最终结论：
+
+- `tx` 与 `last_tx` 每秒增加约 `200`，说明 STM32 `USART2` 上行正式状态帧已经稳定跑到 `200Hz`。
+- `tx_err=0`，说明 DMA 发送链路已恢复正常。
+- `skip=0`，说明当前 `5ms` 周期下没有因为上一帧未发完而跳过周期。
+- 日志中偶尔看到 `g=33`、`cr3=0x81`、`ndtr` 非零，属于采样瞬间落在 DMA 正在发送本帧的中间态，不再表示卡死。
+- 在 ROS 侧未开启时，`rx_ok=0`、`last_rx=0` 是预期现象，不能再据此判断上行失败。
+
+当前建议状态更新为：
+
+- STM32 单边上行 `200Hz` 已验证通过。
+- 前述“发送前 abort 接收、发送后重启接收”的联调绕过方案可以保留在文档中作为阶段性排查记录，但不再作为当前主线方案。
+- 下一步应切回 ROS 侧联调，继续验证 `wheel_leg_stm32_bridge` 在 `200Hz` 上行下的接收稳定性、CRC/长度错误计数，以及 `/joint_command` 下行接收情况。

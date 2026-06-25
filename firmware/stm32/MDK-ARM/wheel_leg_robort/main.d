@@ -37,6 +37,7 @@ wheel_leg_robort\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h
 wheel_leg_robort\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
 wheel_leg_robort\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 wheel_leg_robort\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
+wheel_leg_robort\main.o: ../Core/Inc/dma.h
 wheel_leg_robort\main.o: ../Core/Inc/fdcan.h
 wheel_leg_robort\main.o: ../Core/Inc/memorymap.h
 wheel_leg_robort\main.o: ../Core/Inc/tim.h
