@@ -1,12 +1,30 @@
 #include "uart_protocol_test.h"
 
+#include <cstring>
+
+#include "Car.h"
 #include "usart.h"
 
 static const uint8_t kFrameHead0 = 0xA5;
 static const uint8_t kFrameHead1 = 0x5A;
-static const uint8_t kFrameTypeStatus = 0x81;
-static const uint8_t kMaxPayloadLen = 96;
-static const uint32_t kStatusPeriodMs = 5;
+static const uint8_t kFrameTypeCommand = 0x01;
+static const uint8_t kFrameTypeState = 0x81;
+static const uint8_t kSafetyStateDisabled = 0;
+static const uint8_t kSafetyStateEnabled = 1;
+static const uint8_t kSafetyStateTimeout = 2;
+static const uint8_t kSafetyStateEstop = 3;
+static const uint8_t kSafetyStateFault = 4;
+static const uint8_t kJointCount = 6;
+static const uint8_t kCommandPayloadLen = 2u + kJointCount * 4u;
+static const uint8_t kMaxPayloadLen = 160u;
+static const uint32_t kStatusPeriodMs = 5u;
+static const uint32_t kCommandTimeoutMs = 100u;
+static const float kHipKneeEffortLimit = 12.0f;
+static const float kWheelEffortLimit = 6.0f;
+static const float kHipKneeSlewPerCycle = 0.10f;
+static const float kWheelSlewPerCycle = 0.06f;
+static const float kDegreesToRadians = 3.14159265358979323846f / 180.0f;
+static const float kGravityMps2 = 9.80665f;
 
 enum RxState {
     kHead0,
@@ -20,42 +38,62 @@ enum RxState {
     kCrcHi,
 };
 
+extern Class_Motor_DJI_C620 motor_3508_L;
+extern Class_Motor_DJI_C620 motor_3508_R;
+extern Class_Motor_DJI_GIM6010 motor_GIM6010_L_hip;
+extern Class_Motor_DJI_GIM6010 motor_GIM6010_L_knee;
+extern Class_Motor_DJI_GIM6010 motor_GIM6010_R_hip;
+extern Class_Motor_DJI_GIM6010 motor_GIM6010_R_knee;
+
 extern "C" {
 volatile UartProtocolTestStats uart2_protocol_test_stats = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFFFFFFFFu, 0
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0u, 0xFFFFFFFFu, 0u
 };
 }
 
 namespace {
 
-struct StatusPayload {
+struct StatePayload {
     uint32_t stm_tick_ms;
-    uint32_t rx_bytes;
-    uint32_t frames_ok;
-    uint32_t crc_errors;
-    uint32_t length_errors;
-    uint32_t sync_losses;
-    uint32_t rx_seq_gaps;
-    uint32_t uart_errors;
-    uint16_t last_rx_seq;
-    uint8_t last_rx_type;
-    uint8_t last_rx_len;
-    uint32_t min_frame_gap_ms;
-    uint32_t max_frame_gap_ms;
-    uint32_t last_rx_age_ms;
+    float roll;
+    float pitch;
+    float yaw;
+    float gyro_x;
+    float gyro_y;
+    float gyro_z;
+    float acc_x;
+    float acc_y;
+    float acc_z;
+    float joint_position[kJointCount];
+    float joint_velocity[kJointCount];
+    float joint_effort[kJointCount];
+    uint8_t online_mask;
+    uint8_t safety_state;
+    uint8_t last_command_timeout;
+    uint8_t reserved0;
+    uint32_t comm_rx_error_count;
+    uint32_t comm_crc_error_count;
+    uint32_t can_error_count;
 };
 
-uint8_t g_rx_byte = 0;
+uint8_t g_rx_byte = 0u;
 RxState g_state = kHead0;
-uint8_t g_frame_type = 0;
-uint8_t g_payload_len = 0;
-uint8_t g_payload_index = 0;
-uint16_t g_seq = 0;
-uint16_t g_rx_crc = 0;
-uint16_t g_tx_seq = 0;
-uint32_t g_last_status_tick_ms = 0;
+uint8_t g_frame_type = 0u;
+uint8_t g_payload_len = 0u;
+uint8_t g_payload_index = 0u;
+uint16_t g_seq = 0u;
+uint16_t g_rx_crc = 0u;
+uint16_t g_tx_seq = 0u;
+uint32_t g_last_status_tick_ms = 0u;
 uint8_t g_payload[kMaxPayloadLen] = {0};
-uint8_t g_status_frame[2 + 4 + sizeof(StatusPayload) + 2] = {0};
+uint8_t g_status_frame[2 + 4 + sizeof(StatePayload) + 2] = {0};
+float g_target_efforts[kJointCount] = {0.0f};
+float g_applied_efforts[kJointCount] = {0.0f};
+uint8_t g_command_enable = 0u;
+uint8_t g_command_estop = 0u;
+uint8_t g_last_command_timeout = 1u;
+uint8_t g_safety_state = kSafetyStateDisabled;
+uint32_t g_last_valid_command_tick_ms = 0u;
 
 uint16_t Crc16CcittUpdate(uint16_t crc, uint8_t data)
 {
@@ -95,11 +133,11 @@ uint16_t CalculateFrameCrc()
 void ResetParser()
 {
     g_state = kHead0;
-    g_frame_type = 0;
-    g_payload_len = 0;
-    g_payload_index = 0;
-    g_seq = 0;
-    g_rx_crc = 0;
+    g_frame_type = 0u;
+    g_payload_len = 0u;
+    g_payload_index = 0u;
+    g_seq = 0u;
+    g_rx_crc = 0u;
 }
 
 void WriteU16Le(uint8_t *dst, uint16_t value)
@@ -116,32 +154,100 @@ void WriteU32Le(uint8_t *dst, uint32_t value)
     dst[3] = static_cast<uint8_t>((value >> 24) & 0xFFu);
 }
 
-void FillStatusPayload(uint8_t *dst, uint32_t now)
+void WriteF32Le(uint8_t *dst, float value)
 {
-    uint32_t min_gap_ms = uart2_protocol_test_stats.min_frame_gap_ms;
-    if (min_gap_ms == 0xFFFFFFFFu) {
-        min_gap_ms = 0u;
+    uint32_t raw = 0u;
+    std::memcpy(&raw, &value, sizeof(raw));
+    WriteU32Le(dst, raw);
+}
+
+float ReadF32Le(const uint8_t *src)
+{
+    uint32_t raw = static_cast<uint32_t>(src[0]) |
+                   (static_cast<uint32_t>(src[1]) << 8) |
+                   (static_cast<uint32_t>(src[2]) << 16) |
+                   (static_cast<uint32_t>(src[3]) << 24);
+    float value = 0.0f;
+    std::memcpy(&value, &raw, sizeof(value));
+    return value;
+}
+
+float ConstrainSymmetric(float value, float limit)
+{
+    if (value > limit) {
+        return limit;
+    }
+    if (value < -limit) {
+        return -limit;
+    }
+    return value;
+}
+
+float ApplySlewLimit(float current, float target, float delta_limit)
+{
+    const float delta = target - current;
+    if (delta > delta_limit) {
+        return current + delta_limit;
+    }
+    if (delta < -delta_limit) {
+        return current - delta_limit;
+    }
+    return target;
+}
+
+uint8_t BuildOnlineMask()
+{
+    uint8_t mask = 0u;
+    if (motor_GIM6010_L_hip.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 0);
+    }
+    if (motor_GIM6010_L_knee.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 1);
+    }
+    if (motor_3508_L.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 2);
+    }
+    if (motor_GIM6010_R_hip.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 3);
+    }
+    if (motor_GIM6010_R_knee.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 4);
+    }
+    if (motor_3508_R.Get_Status() == Motor_DJI_Status_ENABLE) {
+        mask |= (1u << 5);
+    }
+    return mask;
+}
+
+uint32_t BuildCanErrorCount(uint8_t online_mask)
+{
+    uint32_t offline_count = 0u;
+    for (uint8_t i = 0; i < kJointCount; ++i) {
+        if ((online_mask & (1u << i)) == 0u) {
+            offline_count++;
+        }
+    }
+    return offline_count;
+}
+
+void DecodeCommandPayload()
+{
+    if (g_frame_type != kFrameTypeCommand) {
+        uart2_protocol_test_stats.length_errors++;
+        return;
+    }
+    if (g_payload_len != kCommandPayloadLen) {
+        uart2_protocol_test_stats.length_errors++;
+        return;
     }
 
-    const uint32_t last_rx_age_ms =
-        (uart2_protocol_test_stats.last_frame_tick_ms == 0u)
-            ? 0xFFFFFFFFu
-            : (now - uart2_protocol_test_stats.last_frame_tick_ms);
-
-    WriteU32Le(dst + 0, now);
-    WriteU32Le(dst + 4, uart2_protocol_test_stats.rx_bytes);
-    WriteU32Le(dst + 8, uart2_protocol_test_stats.frames_ok);
-    WriteU32Le(dst + 12, uart2_protocol_test_stats.crc_errors);
-    WriteU32Le(dst + 16, uart2_protocol_test_stats.length_errors);
-    WriteU32Le(dst + 20, uart2_protocol_test_stats.sync_losses);
-    WriteU32Le(dst + 24, uart2_protocol_test_stats.rx_seq_gaps);
-    WriteU32Le(dst + 28, uart2_protocol_test_stats.uart_errors);
-    WriteU16Le(dst + 32, uart2_protocol_test_stats.last_seq);
-    dst[34] = uart2_protocol_test_stats.last_type;
-    dst[35] = uart2_protocol_test_stats.last_len;
-    WriteU32Le(dst + 36, min_gap_ms);
-    WriteU32Le(dst + 40, uart2_protocol_test_stats.max_frame_gap_ms);
-    WriteU32Le(dst + 44, last_rx_age_ms);
+    g_command_enable = g_payload[0];
+    g_command_estop = g_payload[1];
+    for (uint8_t i = 0; i < kJointCount; ++i) {
+        g_target_efforts[i] = ReadF32Le(g_payload + 2u + 4u * i);
+    }
+    g_last_valid_command_tick_ms = HAL_GetTick();
+    g_last_command_timeout = 0u;
 }
 
 void MarkFrameOk()
@@ -170,6 +276,8 @@ void MarkFrameOk()
     uart2_protocol_test_stats.last_type = g_frame_type;
     uart2_protocol_test_stats.last_len = g_payload_len;
     uart2_protocol_test_stats.last_frame_tick_ms = now;
+
+    DecodeCommandPayload();
 }
 
 void ConsumeByte(uint8_t byte)
@@ -205,7 +313,7 @@ void ConsumeByte(uint8_t byte)
             uart2_protocol_test_stats.length_errors++;
             ResetParser();
         } else {
-            g_payload_index = 0;
+            g_payload_index = 0u;
             g_state = kSeqLo;
         }
         break;
@@ -251,6 +359,105 @@ void RestartReceive()
     }
 }
 
+void FillStatePayload(StatePayload *payload, uint32_t now)
+{
+    if (payload == 0) {
+        return;
+    }
+
+    const uint8_t online_mask = BuildOnlineMask();
+    const uint32_t can_error_count = BuildCanErrorCount(online_mask);
+    const uint32_t comm_rx_error_count =
+        uart2_protocol_test_stats.length_errors +
+        uart2_protocol_test_stats.sync_losses +
+        uart2_protocol_test_stats.rx_seq_gaps +
+        uart2_protocol_test_stats.uart_errors;
+
+    payload->stm_tick_ms = now;
+    payload->roll = static_cast<float>(imu_roll) * kDegreesToRadians;
+    payload->pitch = static_cast<float>(imu_pitch) * kDegreesToRadians;
+    payload->yaw = static_cast<float>(imu_yaw) * kDegreesToRadians;
+    payload->gyro_x = static_cast<float>(gyx) * kDegreesToRadians;
+    payload->gyro_y = static_cast<float>(gyy) * kDegreesToRadians;
+    payload->gyro_z = static_cast<float>(gyz) * kDegreesToRadians;
+    payload->acc_x = static_cast<float>(accx) * kGravityMps2;
+    payload->acc_y = static_cast<float>(accy) * kGravityMps2;
+    payload->acc_z = static_cast<float>(accz) * kGravityMps2;
+
+    payload->joint_position[0] = motor_GIM6010_L_hip.Get_Now_Angle();
+    payload->joint_position[1] = motor_GIM6010_L_knee.Get_Now_Angle();
+    payload->joint_position[2] = motor_3508_L.Get_Now_Angle();
+    payload->joint_position[3] = motor_GIM6010_R_hip.Get_Now_Angle();
+    payload->joint_position[4] = motor_GIM6010_R_knee.Get_Now_Angle();
+    payload->joint_position[5] = motor_3508_R.Get_Now_Angle();
+
+    payload->joint_velocity[0] = motor_GIM6010_L_hip.Get_Now_Omega();
+    payload->joint_velocity[1] = motor_GIM6010_L_knee.Get_Now_Omega();
+    payload->joint_velocity[2] = motor_3508_L.Get_Now_Omega();
+    payload->joint_velocity[3] = motor_GIM6010_R_hip.Get_Now_Omega();
+    payload->joint_velocity[4] = motor_GIM6010_R_knee.Get_Now_Omega();
+    payload->joint_velocity[5] = motor_3508_R.Get_Now_Omega();
+
+    payload->joint_effort[0] = motor_GIM6010_L_hip.Get_Now_Torque();
+    payload->joint_effort[1] = motor_GIM6010_L_knee.Get_Now_Torque();
+    payload->joint_effort[2] = motor_3508_L.Get_Now_Torque();
+    payload->joint_effort[3] = motor_GIM6010_R_hip.Get_Now_Torque();
+    payload->joint_effort[4] = motor_GIM6010_R_knee.Get_Now_Torque();
+    payload->joint_effort[5] = motor_3508_R.Get_Now_Torque();
+
+    payload->online_mask = online_mask;
+    payload->safety_state = g_safety_state;
+    payload->last_command_timeout = g_last_command_timeout;
+    payload->reserved0 = 0u;
+    payload->comm_rx_error_count = comm_rx_error_count;
+    payload->comm_crc_error_count = uart2_protocol_test_stats.crc_errors;
+    payload->can_error_count = can_error_count;
+}
+
+void EncodeStatePayload(const StatePayload &payload, uint8_t *dst)
+{
+    uint16_t offset = 0u;
+    WriteU32Le(dst + offset, payload.stm_tick_ms);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.roll);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.pitch);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.yaw);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.gyro_x);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.gyro_y);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.gyro_z);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.acc_x);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.acc_y);
+    offset += 4u;
+    WriteF32Le(dst + offset, payload.acc_z);
+    offset += 4u;
+
+    for (uint8_t i = 0u; i < kJointCount; ++i) {
+        WriteF32Le(dst + offset, payload.joint_position[i]);
+        offset += 4u;
+        WriteF32Le(dst + offset, payload.joint_velocity[i]);
+        offset += 4u;
+        WriteF32Le(dst + offset, payload.joint_effort[i]);
+        offset += 4u;
+    }
+
+    dst[offset++] = payload.online_mask;
+    dst[offset++] = payload.safety_state;
+    dst[offset++] = payload.last_command_timeout;
+    dst[offset++] = payload.reserved0;
+    WriteU32Le(dst + offset, payload.comm_rx_error_count);
+    offset += 4u;
+    WriteU32Le(dst + offset, payload.comm_crc_error_count);
+    offset += 4u;
+    WriteU32Le(dst + offset, payload.can_error_count);
+}
+
 void TrySendStatusFrame()
 {
     const uint32_t now = HAL_GetTick();
@@ -259,15 +466,19 @@ void TrySendStatusFrame()
     }
     g_last_status_tick_ms = now;
 
-    const uint8_t payload_len = static_cast<uint8_t>(sizeof(StatusPayload));
+    StatePayload payload = {};
+    FillStatePayload(&payload, now);
+
+    const uint8_t payload_len = static_cast<uint8_t>(sizeof(StatePayload));
     g_status_frame[0] = kFrameHead0;
     g_status_frame[1] = kFrameHead1;
-    g_status_frame[2] = kFrameTypeStatus;
+    g_status_frame[2] = kFrameTypeState;
     g_status_frame[3] = payload_len;
     WriteU16Le(g_status_frame + 4, g_tx_seq);
-    FillStatusPayload(g_status_frame + 6, now);
+    EncodeStatePayload(payload, g_status_frame + 6);
 
-    const uint16_t crc = Crc16Ccitt(g_status_frame + 2, static_cast<uint16_t>(4u + payload_len));
+    const uint16_t crc =
+        Crc16Ccitt(g_status_frame + 2, static_cast<uint16_t>(4u + payload_len));
     const uint16_t crc_index = static_cast<uint16_t>(6u + payload_len);
     WriteU16Le(g_status_frame + crc_index, crc);
 
@@ -288,8 +499,17 @@ extern "C" void UartProtocolTest_Init(void)
 {
     ResetParser();
     UartProtocolTest_ResetStats();
-    g_tx_seq = 0;
+    g_tx_seq = 0u;
     g_last_status_tick_ms = HAL_GetTick();
+    g_last_valid_command_tick_ms = 0u;
+    g_command_enable = 0u;
+    g_command_estop = 0u;
+    g_last_command_timeout = 1u;
+    g_safety_state = kSafetyStateDisabled;
+    for (uint8_t i = 0u; i < kJointCount; ++i) {
+        g_target_efforts[i] = 0.0f;
+        g_applied_efforts[i] = 0.0f;
+    }
     RestartReceive();
 }
 
@@ -328,24 +548,76 @@ extern "C" void UartProtocolTest_GetStats(UartProtocolTestStats *out)
 extern "C" void UartProtocolTest_ResetStats(void)
 {
     __disable_irq();
-    uart2_protocol_test_stats.rx_bytes = 0;
-    uart2_protocol_test_stats.frames_ok = 0;
-    uart2_protocol_test_stats.crc_errors = 0;
-    uart2_protocol_test_stats.length_errors = 0;
-    uart2_protocol_test_stats.sync_losses = 0;
-    uart2_protocol_test_stats.rx_seq_gaps = 0;
-    uart2_protocol_test_stats.uart_errors = 0;
-    uart2_protocol_test_stats.tx_frames = 0;
-    uart2_protocol_test_stats.tx_bytes = 0;
-    uart2_protocol_test_stats.tx_errors = 0;
-    uart2_protocol_test_stats.last_seq = 0;
-    uart2_protocol_test_stats.last_tx_seq = 0;
-    uart2_protocol_test_stats.last_type = 0;
-    uart2_protocol_test_stats.last_len = 0;
-    uart2_protocol_test_stats.last_frame_tick_ms = 0;
+    uart2_protocol_test_stats.rx_bytes = 0u;
+    uart2_protocol_test_stats.frames_ok = 0u;
+    uart2_protocol_test_stats.crc_errors = 0u;
+    uart2_protocol_test_stats.length_errors = 0u;
+    uart2_protocol_test_stats.sync_losses = 0u;
+    uart2_protocol_test_stats.rx_seq_gaps = 0u;
+    uart2_protocol_test_stats.uart_errors = 0u;
+    uart2_protocol_test_stats.tx_frames = 0u;
+    uart2_protocol_test_stats.tx_bytes = 0u;
+    uart2_protocol_test_stats.tx_errors = 0u;
+    uart2_protocol_test_stats.last_seq = 0u;
+    uart2_protocol_test_stats.last_tx_seq = 0u;
+    uart2_protocol_test_stats.last_type = 0u;
+    uart2_protocol_test_stats.last_len = 0u;
+    uart2_protocol_test_stats.last_frame_tick_ms = 0u;
     uart2_protocol_test_stats.min_frame_gap_ms = 0xFFFFFFFFu;
-    uart2_protocol_test_stats.max_frame_gap_ms = 0;
+    uart2_protocol_test_stats.max_frame_gap_ms = 0u;
     __enable_irq();
+}
+
+extern "C" void UartProtocolTest_FillActuatorCommand(
+    float *out_efforts,
+    uint32_t effort_count)
+{
+    const uint32_t now = HAL_GetTick();
+    const bool timed_out =
+        (g_last_valid_command_tick_ms == 0u) ||
+        ((now - g_last_valid_command_tick_ms) > kCommandTimeoutMs);
+
+    if (timed_out) {
+        g_last_command_timeout = 1u;
+    }
+
+    uint8_t online_mask = BuildOnlineMask();
+    const bool any_motor_offline = (online_mask != 0x3Fu);
+    if (g_command_estop != 0u) {
+        g_safety_state = kSafetyStateEstop;
+    } else if (timed_out) {
+        g_safety_state = kSafetyStateTimeout;
+    } else if (g_command_enable == 0u) {
+        g_safety_state = kSafetyStateDisabled;
+    } else if (any_motor_offline) {
+        g_safety_state = kSafetyStateFault;
+    } else {
+        g_safety_state = kSafetyStateEnabled;
+    }
+
+    for (uint8_t i = 0u; i < kJointCount; ++i) {
+        float target = 0.0f;
+        if (g_safety_state == kSafetyStateEnabled) {
+            target = g_target_efforts[i];
+        }
+
+        const float effort_limit = (i == 2u || i == 5u) ?
+            kWheelEffortLimit : kHipKneeEffortLimit;
+        const float slew_limit = (i == 2u || i == 5u) ?
+            kWheelSlewPerCycle : kHipKneeSlewPerCycle;
+        target = ConstrainSymmetric(target, effort_limit);
+        g_applied_efforts[i] =
+            ApplySlewLimit(g_applied_efforts[i], target, slew_limit);
+
+        if (out_efforts != 0 && i < effort_count) {
+            out_efforts[i] = g_applied_efforts[i];
+        }
+    }
+}
+
+extern "C" uint8_t UartProtocolTest_GetSafetyState(void)
+{
+    return g_safety_state;
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)

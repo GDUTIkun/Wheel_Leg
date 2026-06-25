@@ -110,7 +110,7 @@ class RcIbusNode : public rclcpp::Node {
         declare_parameter<std::string>("control_mode.mid_label", "stand");
     mode_high_label_ =
         declare_parameter<std::string>("control_mode.high_label", "velocity");
-    estop_channel_ = declare_parameter<int>("estop.channel", 5);
+    estop_channel_ = declare_parameter<int>("estop.channel", 7);
     estop_threshold_ = declare_parameter<double>("estop.threshold", 1500.0);
     estop_active_below_ =
         declare_parameter<bool>("estop.active_below", true);
@@ -481,6 +481,7 @@ class RcIbusNode : public rclcpp::Node {
     status.receiver_online = receiver_online;
     status.frame_timeout = frame_timeout;
     status.failsafe = failsafe;
+    status.estop_active = IsEstopActive();
     status.valid_frame_count = counters_.valid_frame_count;
     status.checksum_error_count = counters_.checksum_error_count;
     status.frame_sync_loss_count = counters_.frame_sync_loss_count;

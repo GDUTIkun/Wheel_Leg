@@ -471,6 +471,33 @@ ROS 侧接收 STM32 状态帧统计：
 - `delta_rx_seq_gaps = 1`
 - `delta_uart_errors = 0`
 
+STM32 侧 `USART1` 调试打印观察：
+
+- 早期一次误判记录中，STM32 侧表现为 `tx` 持续增长，但 `rx_ok`、`last_rx` 长时间不变；后续确认当时 ROS 侧压测节点未启动，因此只能证明 STM32 上行发送正常，不能据此判断链路整体异常。
+- 在 ROS 压测节点正确启动后的稳定窗口内，STM32 侧打印可见 `rx_ok` 与 `tx` 同步持续增长，`last_rx`、`last_tx` 也连续前进，说明双向链路都在工作。
+- 现场串口打印样例如下：
+
+```text
+uart2 rx_ok=4397 rx_crc=94 rx_gap=47 tx=4600 tx_err=0 last_rx=5991 last_tx=4599
+uart2 rx_ok=4597 rx_crc=94 rx_gap=47 tx=4800 tx_err=0 last_rx=6191 last_tx=4799
+uart2 rx_ok=4797 rx_crc=94 rx_gap=47 tx=5000 tx_err=0 last_rx=6391 last_tx=4999
+uart2 rx_ok=4997 rx_crc=94 rx_gap=47 tx=5200 tx_err=0 last_rx=6591 last_tx=5199
+uart2 rx_ok=5197 rx_crc=94 rx_gap=47 tx=5400 tx_err=0 last_rx=6791 last_tx=5399
+uart2 rx_ok=5397 rx_crc=94 rx_gap=47 tx=5600 tx_err=0 last_rx=6991 last_tx=5599
+uart2 rx_ok=5597 rx_crc=94 rx_gap=47 tx=5800 tx_err=0 last_rx=7191 last_tx=5799
+uart2 rx_ok=5797 rx_crc=94 rx_gap=47 tx=6000 tx_err=0 last_rx=7391 last_tx=5999
+uart2 rx_ok=5997 rx_crc=94 rx_gap=47 tx=6200 tx_err=0 last_rx=7591 last_tx=6199
+uart2 rx_ok=6197 rx_crc=94 rx_gap=47 tx=6400 tx_err=0 last_rx=7791 last_tx=6399
+uart2 rx_ok=6345 rx_crc=117 rx_gap=59 tx=6600 tx_err=0 last_rx=7988 last_tx=6599
+```
+
+由 STM32 侧打印可以直接得到：
+
+- `tx_err=0`，说明 STM32 `USART2` 上行状态帧发送没有出现 HAL 发送失败。
+- `rx_ok` 持续增长，说明 ROS 下行压测帧已被 STM32 持续成功解包。
+- `last_rx` 与 `last_tx` 基本按固定步长推进，说明两侧周期配置和序号推进逻辑一致。
+- `rx_crc`、`rx_gap` 虽然在稳定窗口内仍有小幅增长，但相对累计成功帧占比很低；当前状态可以认为“链路已打通，可进入后续 ROS 映射和长时间稳定性观察阶段”。
+
 当前结论：
 
 - UART4 到 STM32 USART2 的双向协议通信已打通。
@@ -478,3 +505,74 @@ ROS 侧接收 STM32 状态帧统计：
 - ROS 到 STM32 的命令帧发送链路正常，STM32 已持续成功解包下行命令帧。
 - 本轮窗口内 `CRC`、长度、同步和 `UART` 错误新增均为 `0`，链路质量明显优于未共地时的失败状态。
 - `delta_rx_seq_gaps = 1` 说明仍存在轻微偶发序号跳变，后续可在更长时间窗口继续观察，但当前已经满足“首轮链路打通”目标。
+
+### 12.3 2026-06-25 正式通信节点 V1 代码落地
+
+本轮已按“正式通信节点 V1”计划完成第一版代码接线，但当前结论仍属于“代码已落地，待板级联调验证”，不是最终硬件验收结论。
+
+本轮已完成的代码改动：
+
+- `wheel_leg_stm32_bridge` 已从占位节点切换为正式串口 bridge。
+- ROS 侧 bridge 已实现 `0xA5 0x5A` 帧头、`type/len/seq/payload/crc16-ccitt` 解包与命令打包。
+- ROS 侧 bridge 已发布：
+  - `/robot_state`
+  - `/imu`
+  - `/joint_states`
+- ROS 侧 bridge 已订阅：
+  - `/joint_command`
+  - `/rc/status`
+- `wheel_leg_msgs/msg/RcStatus.msg` 已新增 `estop_active` 字段。
+- `wheel_leg_rc` 已将急停默认通道固定为 `channel 7`，并按“低值端触发急停”输出 `estop_active=true`。
+- bridge 已把 `RC ch7` 急停并入下行命令帧门控：
+  - `estop_active=true` 时强制下发 `estop=1`
+  - 同时强制 `enable=0`
+  - 六路力矩清零
+- `hw.launch.py` 已增加正式 bridge 的串口和发布参数透传。
+- `rc.launch.py` 已增加 `estop_channel` 与 `estop_active_below` launch 参数，默认保持 `7 / true`。
+
+STM32 侧本轮已完成的代码改动：
+
+- `uart_protocol_test.cpp` 已从纯压测 payload 升级为正式协议对端。
+- STM32 侧已实现下行命令帧解析：
+  - `enable`
+  - `estop`
+  - 六路 `float32` 力矩命令
+- STM32 侧已实现基础执行层保护：
+  - 命令超时失能
+  - 急停失能
+  - 六路力矩限幅
+  - 单周期斜率限制
+- STM32 侧已改为周期回传真实状态帧：
+  - `stm_tick_ms`
+  - IMU 角度/角速度/加速度
+  - 六电机位置/速度/反馈力矩
+  - `online_mask`
+  - `safety_state`
+  - `last_command_timeout`
+  - 通信与 CAN 诊断计数
+- `Car.cpp` 已改为从通信模块读取六路执行力矩，而不是继续使用单一测试 `target`。
+
+本轮已完成的软件验证：
+
+- ROS 侧已在本机完成以下包编译通过：
+  - `wheel_leg_msgs`
+  - `wheel_leg_bridge`
+  - `wheel_leg_rc`
+  - `wheel_leg_stm32_bridge`
+  - `wheel_leg_control`
+  - `wheel_leg_bringup`
+- `RcStatus` 新接口已可正确导出并被 ROS 侧包依赖。
+
+本轮尚未完成的验证：
+
+- 尚未在当前环境完成 STM32 工程编译验证。
+- 尚未完成正式 `type=0x81` 新 payload 与 ROS bridge 的上板联调。
+- 尚未完成 `RC ch7 -> bridge -> command estop -> STM32 safety_state` 的整链硬件验证。
+- 尚未完成六电机方向、单位、限幅和斜率限制的悬空验证。
+- 尚未完成 `/robot_state` 新来源下的 100Hz 实机闭环联调。
+
+因此当前阶段状态应理解为：
+
+- 压测链路：`[v] 已打通`
+- 正式 V1 代码：`[x] 已实现`
+- 正式 V1 硬件闭环：`[~] 待联调验证`

@@ -4,6 +4,7 @@ bool serial_online
 bool receiver_online
 bool frame_timeout
 bool failsafe
+bool estop_active
 uint32 valid_frame_count
 uint32 checksum_error_count
 uint32 frame_sync_loss_count

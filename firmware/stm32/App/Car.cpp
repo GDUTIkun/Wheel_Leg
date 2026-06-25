@@ -116,6 +116,7 @@ void Car_Start(void* pv)
 
 double gyx, gyy, gyz, y;
 double accx, accy, accz;
+double imu_roll, imu_pitch, imu_yaw;
 
 void Data_Task(void* pv)
 {
@@ -125,6 +126,7 @@ void Data_Task(void* pv)
     {
         JY901S_Acc(&accx, &accy,&accz);
         JY901S_Gyro(&gyx, &gyy, &gyz, &y);
+        JY901S_Angle(&imu_roll, &imu_pitch, &imu_yaw);
 
         xTaskNotifyGive(control_task_handle);//给控制任务通知
         xTaskDelayUntil(&pxPreviousWakeTime, 5);
@@ -148,29 +150,30 @@ static const float knee_relative_min_deg = -140.0f;
 static const float knee_relative_max_deg = -70.0f;
 static const float knee_limit_epsilon_deg = 0.001f;
 
-float target = 0.0f;
-float l_ref,r_ref;
-float l_hip_min, l_hip_max, l_knee_min, l_knee_max;
 float r_hip_angle, r_knee_angle, l_hip_angle, l_knee_angle;
 float r_knee_relative_angle, l_knee_relative_angle;
 float r_hip_omega, r_knee_omega, l_hip_omega, l_knee_omega;
 uint8_t knee_limit_flag = 0;
 uint8_t debugflag = 0;
 void Motor_Control_Task(void* pv)
-{    
+{
+    float actuator_efforts[6] = {0.0f};
     while(1)
     {
-        motor_3508_L.Set_Target_Torque(target);
+        UartProtocolTest_FillActuatorCommand(actuator_efforts, 6);
+
+        motor_GIM6010_L_hip.Set_Target_Torque(actuator_efforts[0]);
+        motor_GIM6010_L_knee.Set_Target_Torque(actuator_efforts[1]);
+        motor_3508_L.Set_Target_Torque(actuator_efforts[2]);
+        motor_GIM6010_R_hip.Set_Target_Torque(actuator_efforts[3]);
+        motor_GIM6010_R_knee.Set_Target_Torque(actuator_efforts[4]);
+        motor_3508_R.Set_Target_Torque(actuator_efforts[5]);
+
         motor_3508_L.TIM_Calculate_PeriodElapsedCallback();
-        motor_3508_R.Set_Target_Torque(target);
         motor_3508_R.TIM_Calculate_PeriodElapsedCallback();
-        motor_GIM6010_L_hip.Set_Target_Torque(-target);
         motor_GIM6010_L_hip.TIM_Calculate_PeriodElapsedCallback();
-        motor_GIM6010_L_knee.Set_Target_Torque(-target);
         motor_GIM6010_L_knee.TIM_Calculate_PeriodElapsedCallback();
-        motor_GIM6010_R_hip.Set_Target_Torque(target);
         motor_GIM6010_R_hip.TIM_Calculate_PeriodElapsedCallback();
-        motor_GIM6010_R_knee.Set_Target_Torque(target);
         motor_GIM6010_R_knee.TIM_Calculate_PeriodElapsedCallback();
         l_knee_angle =  Basic_Math_Rad_To_Deg(motor_GIM6010_L_knee.Get_Now_Angle());
         r_knee_angle =  Basic_Math_Rad_To_Deg(motor_GIM6010_R_knee.Get_Now_Angle());
@@ -218,8 +221,6 @@ void Control_Task(void* pv)
     while(1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);//等待通知
-        
-       
     }
 }
 

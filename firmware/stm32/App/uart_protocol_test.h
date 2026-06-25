@@ -34,6 +34,8 @@ void UartProtocolTest_Init(void);
 void UartProtocolTest_Process(void);
 void UartProtocolTest_GetStats(UartProtocolTestStats *out);
 void UartProtocolTest_ResetStats(void);
+void UartProtocolTest_FillActuatorCommand(float *out_efforts, uint32_t effort_count);
+uint8_t UartProtocolTest_GetSafetyState(void);
 
 #ifdef __cplusplus
 }
