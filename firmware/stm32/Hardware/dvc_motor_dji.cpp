@@ -55,27 +55,28 @@ void MapGIM6010AngleToLegFrame(const Enum_Motor_DJI_ID can_id,
     // Calibration from leg_data.txt:
     // World angle convention: horizontal +X is 0 deg, clockwise is positive.
     // Vertical downward is 90 deg and vertical upward is 270 deg.
-    // L hip live check: 180/90 deg should become 90/180 deg.
-    // R hip live check: 20/290/200 deg should become 0/90/180 deg.
+    // Hip calibration pose maps both sides to 190.81 deg in world frame.
+    // Knee calibration pose maps link angle magnitude 63.86 deg to -63.86 deg
+    // in the current relative-angle convention.
     // Knee motors are mounted on hip_link, so knee world angle is:
     // hip_world_angle + knee_relative_angle + knee_offset.
     switch (can_id)
     {
     case CAN_Motor_ID_0x4E:
-        *mapped_angle = NormalizeAnglePositive(-motor_angle + 127.9028f * kDegToRad);
+        *mapped_angle = NormalizeAnglePositive(-motor_angle + 135.3688f * kDegToRad);
         *mapped_omega = -motor_omega;
         g_left_hip_world_angle = *mapped_angle;
         g_left_hip_world_omega = *mapped_omega;
         break;
     case CAN_Motor_ID_0x2E:
-        *mapped_angle = NormalizeAnglePositive(motor_angle - 238.708f * kDegToRad);
+        *mapped_angle = NormalizeAnglePositive(motor_angle + 127.758f * kDegToRad);
         *mapped_omega = motor_omega;
         g_right_hip_world_angle = *mapped_angle;
         g_right_hip_world_omega = *mapped_omega;
         break;
     case CAN_Motor_ID_0x6E:
     {
-        const float knee_relative_angle = -motor_angle - 69.641f * kDegToRad;
+        const float knee_relative_angle = -motor_angle - 68.491f * kDegToRad;
         *mapped_angle = NormalizeAnglePositive(g_left_hip_world_angle +
                                                knee_relative_angle);
         *mapped_omega = g_left_hip_world_omega - motor_omega;
@@ -83,7 +84,7 @@ void MapGIM6010AngleToLegFrame(const Enum_Motor_DJI_ID can_id,
     }
     case CAN_Motor_ID_0x8E:
     {
-        const float knee_relative_angle = motor_angle - 69.688f * kDegToRad;
+        const float knee_relative_angle = motor_angle - 68.538f * kDegToRad;
         *mapped_angle = NormalizeAnglePositive(g_right_hip_world_angle +
                                                knee_relative_angle);
         *mapped_omega = g_right_hip_world_omega + motor_omega;

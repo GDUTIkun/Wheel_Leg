@@ -22,6 +22,26 @@
 
 /* USER CODE BEGIN 0 */
 
+struct __FILE
+{
+  int handle;
+  /* Whatever you require here. If the only file you are using is */
+  /* standard output using printf() for debugging, no file handling */
+  /* is required. */
+};
+/* FILE is typedef'd in stdio.h. */
+FILE __stdout;
+int fputc(int ch, FILE *f)
+{
+  HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, 0xfff);
+  return ch;
+}
+int ferror(FILE *f)
+{
+  /* Your implementation of ferror(). */
+  return 0;
+}
+
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;
@@ -41,7 +61,7 @@ void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 921600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -192,11 +212,13 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE BEGIN USART1_MspInit 1 */
+    HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE END USART1_MspInit 1 */
   }
@@ -288,6 +310,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     HAL_GPIO_DeInit(GPIOA, GPIO_PIN_9|GPIO_PIN_10);
 
   /* USER CODE BEGIN USART1_MspDeInit 1 */
+    HAL_NVIC_DisableIRQ(USART1_IRQn);
 
   /* USER CODE END USART1_MspDeInit 1 */
   }

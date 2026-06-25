@@ -82,3 +82,6 @@ wheel_leg_robort\car.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/quaternio
 wheel_leg_robort\car.o: D:\Keli5\Pack\ARM\CMSIS-DSP\1.16.2\Include\dsp/window_functions.h
 wheel_leg_robort\car.o: ../Hardware/drv_can.h
 wheel_leg_robort\car.o: ../Core/Inc/fdcan.h
+wheel_leg_robort\car.o: ../Core/Inc/usart.h
+wheel_leg_robort\car.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h
+wheel_leg_robort\car.o: ..\App\uart_protocol_test.h

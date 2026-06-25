@@ -7,17 +7,17 @@
 ```text
 l_hip_angle  = -55.4412
 r_hip_angle  =  63.052
-world angle  = 195.656
+world angle  = 190.81
 
 l_knee_angle = -4.631
 r_knee_angle =  4.678
-link angle   =  65.01
+link angle   =  63.86
 ```
 
 原始标定含义：
 
-- 左右髋关节电机读数在安装方向上相反，但该姿态下都应映射到世界坐标系中相对于水平线的 `195.656 deg`。
-- 左右膝关节电机读数也在安装方向上相反，该姿态下对应大腿与膝关节电机连接摆杆的夹角 `65.01 deg`。
+- 左右髋关节电机读数在安装方向上相反，但该姿态下都应映射到世界坐标系中相对于水平线的 `190.81 deg`。
+- 左右膝关节电机读数也在安装方向上相反，该姿态下对应大腿与膝关节电机连接摆杆的夹角幅值为 `63.86 deg`。按当前 knee 相对角和限位方向，固件中该相对角记为 `-63.86 deg`。
 
 后续右髋现场补充观测：
 
@@ -96,20 +96,33 @@ CAN_Motor_ID_0x8E: right knee
 映射公式，角度单位为 `deg`：
 
 ```text
-left_hip_world  = normalize_0_360(-left_hip_motor + 127.9028)
-right_hip_world = normalize_0_360(right_hip_motor - 238.708)
+left_hip_world  = normalize_0_360(-left_hip_motor + 135.3688)
+right_hip_world = normalize_0_360(right_hip_motor + 127.758)
 
-left_knee_world  = normalize_0_360(left_hip_world - left_knee_motor - 69.641)
-right_knee_world = normalize_0_360(right_hip_world + right_knee_motor - 69.688)
+left_knee_world  = normalize_0_360(left_hip_world - left_knee_motor - 68.491)
+right_knee_world = normalize_0_360(right_hip_world + right_knee_motor - 68.538)
 ```
 
 这里的常数就是当前安装状态下的偏置。左右髋、左膝和右膝均已按现场观测修正：
 
 ```text
-left_hip_offset  = 270 - 142.0972      = 127.9028
-right_hip_offset = 20 - 258.708         = -238.708
-left_knee_offset = -69.641
-right_knee_offset= -69.688
+left_hip_offset   = 190.81 + (-55.4412) = 135.3688
+right_hip_offset  = 190.81 - 63.052     = 127.758
+left_knee_offset  = -63.86 + (-4.631)   = -68.491
+right_knee_offset = -63.86 - 4.678      = -68.538
+```
+
+代入 `leg_data.txt` 新标定：
+
+```text
+left_hip_world  = -(-55.4412) + 135.3688 = 190.81
+right_hip_world = 63.052 + 127.758       = 190.81
+
+left_knee_relative  = -(-4.631) - 68.491 = -63.86
+right_knee_relative = 4.678 - 68.538     = -63.86
+
+left_knee_world  = 190.81 - 63.86 = 126.95
+right_knee_world = 190.81 - 63.86 = 126.95
 ```
 
 角速度映射公式，单位为 `deg/s`：

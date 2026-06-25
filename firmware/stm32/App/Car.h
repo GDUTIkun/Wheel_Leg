@@ -4,6 +4,7 @@
 #include "task.h"
 #include "jy901s.h"
 #include "dvc_motor_dji.h"
+#include "usart.h"
 
 void Car_Init(void);
 

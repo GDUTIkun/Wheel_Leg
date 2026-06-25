@@ -745,6 +745,16 @@
               <FileType>8</FileType>
               <FilePath>..\App\Car.cpp</FilePath>
             </File>
+            <File>
+              <FileName>uart_protocol_test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\uart_protocol_test.h</FilePath>
+            </File>
+            <File>
+              <FileName>uart_protocol_test.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\App\uart_protocol_test.cpp</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

@@ -100,6 +100,24 @@ cd ~/wheel_leg_ws
 ./scripts/run_pi.sh hw_core
 ```
 
+UART4 到 STM32 USART1 通信压测：
+
+```bash
+sudo ./tools/uart_loopback.py configure
+sudo reboot
+```
+
+重启后：
+
+```bash
+./tools/uart_loopback.py status
+source /opt/ros/jazzy/setup.bash
+source ./ros2_ws/install/local_setup.bash
+./tools/uart_frame_sender.py --port /dev/ttyAMA4 --baud 921600 --rate-hz 200 --payload-len 32 --duration 60
+```
+
+详细判据见 `docs/stm32_ros_comm_task.md`。
+
 ## 手动方式
 
 手动加载环境：

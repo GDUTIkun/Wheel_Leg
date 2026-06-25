@@ -1,4 +1,5 @@
 #include "Car.h"
+#include "uart_protocol_test.h"
 
 #define CAR_START_STACK                 128
 #define CAR_START_PRIORITY              1
@@ -50,6 +51,8 @@ void Car_Init(void)
     motor_GIM6010_L_knee.Init(&hfdcan1, CAN_Motor_ID_0x6E, 0.0f);
     motor_GIM6010_R_hip.Init(&hfdcan1, CAN_Motor_ID_0x2E, 0.0f);
     motor_GIM6010_R_knee.Init(&hfdcan1, CAN_Motor_ID_0x8E, 0.0f);
+
+    UartProtocolTest_Init();
 
     init_finished = true;
 
@@ -226,7 +229,8 @@ void Debug_Task(void* pv)
 
     while(1)
     {
-        
+        const char msg[] = "uart1 test\r\n";
+        HAL_UART_Transmit(&huart1, (uint8_t *)msg, sizeof(msg) - 1, 100);
 
         if(debugflag == 1)
         {

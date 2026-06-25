@@ -41,6 +41,7 @@ wheel_leg_robort\main.o: ../Core/Inc/fdcan.h
 wheel_leg_robort\main.o: ../Core/Inc/memorymap.h
 wheel_leg_robort\main.o: ../Core/Inc/tim.h
 wheel_leg_robort\main.o: ../Core/Inc/usart.h
+wheel_leg_robort\main.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h
 wheel_leg_robort\main.o: ../Core/Inc/gpio.h
 wheel_leg_robort\main.o: ../App/Car.h
 wheel_leg_robort\main.o: ../Middle/FreeRTOS/include/FreeRTOS.h

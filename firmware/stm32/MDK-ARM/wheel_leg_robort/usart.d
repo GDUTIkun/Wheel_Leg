@@ -38,3 +38,4 @@ wheel_leg_robort\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.
 wheel_leg_robort\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
 wheel_leg_robort\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 wheel_leg_robort\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
+wheel_leg_robort\usart.o: D:\Keli5\ARM\ARMCC\Bin\..\include\stdio.h

@@ -46,6 +46,7 @@
 "wheel_leg_robort\dvc_motor_dji.o"
 "wheel_leg_robort\drv_can.o"
 "wheel_leg_robort\car.o"
+"wheel_leg_robort\uart_protocol_test.o"
 "wheel_leg_robort\alg_basic_1.o"
 "wheel_leg_robort\alg_pid_1.o"
 "wheel_leg_robort\basicmathfunctions.o"
