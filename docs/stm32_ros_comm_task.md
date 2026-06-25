@@ -415,3 +415,66 @@ UartProtocolTest_ResetStats();
 - `docs/protocol.md` 继续固定仿真和实机共用的 Topic、命名、单位和方向边界。
 - `docs/stm32_hardware_integration.md` 继续作为硬件接入与实机闭环总任务。
 - 本文档专门记录 STM32 与 ROS 第一版通信内容、字段和验收任务。
+
+## 12. 实测记录
+
+### 12.1 2026-06-25 UART4 <-> USART2 首轮联调
+
+测试环境：
+
+- Raspberry Pi 串口设备：`/dev/ttyAMA4`
+- STM32 串口：`USART2`
+- 参数：`921600 8N1`
+- ROS 侧压测节点：`stm32_uart_stress_node`
+- 下行发送参数：`200Hz`、`payload_len=32`
+- STM32 上行状态帧：`type=0x81`、`200Hz`、`payload_len=48`
+
+第一次测试现象：
+
+- 当时 Raspberry Pi 与 STM32 未共地。
+- ROS 侧下行发送统计正常，`write_errors=0`、`partial_writes=0`。
+- 但 ROS 侧无法按 `0xA5 0x5A` 帧格式解出任何合法 `type=0x81` 状态帧。
+- `/dev/ttyAMA4` 上能读到原始字节流，但内容表现为噪声，说明物理链路参考地缺失会直接导致协议解包失败。
+
+修正后结果：
+
+- 补上 `Raspberry Pi GND -- STM32 GND` 共地后，链路恢复正常。
+- ROS 侧可以稳定解出 STM32 回传的合法 `type=0x81` 状态帧。
+- 这次联调确认了“必须共地”不仅是接线规范，也是本链路是否能建立协议通信的前置条件。
+
+### 12.2 2026-06-25 5 秒复测结果
+
+复测参数保持不变：`/dev/ttyAMA4`、`921600 8N1`、ROS 下行 `200Hz`、`payload_len=32`。
+
+ROS 侧发送统计：
+
+- `attempted=801`
+- `sent=801`
+- `write_errors=0`
+- `partial_writes=0`
+- `deadline_misses=0`
+
+ROS 侧接收 STM32 状态帧统计：
+
+- `valid_type81=1002`
+- `crc_err=0`
+
+从 STM32 `type=0x81` 状态帧解出的 5 秒窗口增量：
+
+- `delta_stm_tick_ms = 5005`
+- `delta_seq = 1001`
+- `delta_frames_ok = 880`
+- `delta_rx_bytes = 35200`
+- `delta_crc_errors = 0`
+- `delta_length_errors = 0`
+- `delta_sync_losses = 0`
+- `delta_rx_seq_gaps = 1`
+- `delta_uart_errors = 0`
+
+当前结论：
+
+- UART4 到 STM32 USART2 的双向协议通信已打通。
+- STM32 到 ROS 的 `type=0x81` 上行状态帧在本轮 5 秒复测中稳定。
+- ROS 到 STM32 的命令帧发送链路正常，STM32 已持续成功解包下行命令帧。
+- 本轮窗口内 `CRC`、长度、同步和 `UART` 错误新增均为 `0`，链路质量明显优于未共地时的失败状态。
+- `delta_rx_seq_gaps = 1` 说明仍存在轻微偶发序号跳变，后续可在更长时间窗口继续观察，但当前已经满足“首轮链路打通”目标。

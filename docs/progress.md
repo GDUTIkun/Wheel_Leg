@@ -53,7 +53,7 @@
 | 仿真控制参数基线 | `100hz_balance_notes.md` | `[v] 阶段冻结` | 100Hz 仿真已可稳定站立，参数等待硬件接入后重新小步调整 |
 | 腿部角度映射 | `leg_angle_mapping.md` | `[v] 速度已验证` | 已按现场观测修正左右髋和左右膝世界角；四个关节角速度极性已实机确认，knee 角速度已正确叠加 hip 角速度 |
 | STM32 硬件接入任务 | `stm32_hardware_integration.md` | `[~] 进行中` | 下一阶段主线，先打通通信、状态上报、命令下发、安全停机和方向/单位校验 |
-| STM32 与 ROS 通信内容 | `stm32_ros_comm_task.md` | `[~] 规划已记录` | 第一版固定为串口通信，ROS 控制闭环 100Hz，STM 状态上报优先测试 200Hz，两侧手动解包 |
+| STM32 与 ROS 通信内容 | `stm32_ros_comm_task.md` | `[~] 首轮联调已完成` | 第一版固定为串口通信，ROS 控制闭环 100Hz，STM 状态上报优先测试 200Hz；`2026-06-25` 已完成 UART4 <-> USART2 首轮双向联调并记录共地问题 |
 | 工程结构与接口约束 | `architecture.md` / `protocol.md` | `[~] 持续维护` | 保留为当前文档入口，不再维护旧 `docs/doc/` 规划体系 |
 
 ## 5. 推荐执行顺序
@@ -91,7 +91,9 @@
 ### 7.2 STM32 通信与状态上报
 
 - ROS 控制闭环按 `100Hz` 规划；STM32 状态上报频率需要实测，当前传感器读取约 `3ms` 以内，优先验证 `200Hz` 状态上报。
-- 待实测 Raspberry Pi 与 STM32 的通信周期、丢包、超时和错误计数。
+- `2026-06-25` 已完成 Raspberry Pi UART4 与 STM32 USART2 的首轮 5 秒双向联调：ROS 侧可稳定解出 `type=0x81` 状态帧，ROS 下行发送无 `write_errors`/`partial_writes`，复测窗口内 STM32 新增 `crc_errors`、`length_errors`、`sync_losses`、`uart_errors` 均为 `0`。
+- 首次失败原因已确认是未共地；补上 `Raspberry Pi GND -- STM32 GND` 后通信恢复正常。
+- 后续仍建议补一轮更长时间窗口测试，继续观察 `rx_seq_gaps` 是否偶发增长。
 - 待确认 STM32 上传的编码器、IMU、电机反馈可以稳定映射到 ROS2 状态接口。
 - 待确认时间戳和 `dt` 口径，实测控制周期应围绕 `0.01s`。
 
