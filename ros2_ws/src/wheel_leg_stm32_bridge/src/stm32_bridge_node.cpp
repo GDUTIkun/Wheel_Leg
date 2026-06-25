@@ -56,6 +56,15 @@ constexpr double kRightHipOffsetDeg = 145.56;
 constexpr double kLeftKneeOffsetDeg = 26.04;
 constexpr double kRightKneeOffsetDeg = 33.843;
 constexpr double kPhiRateLowPassAlpha = 0.95;
+// Maps ROS joint torque semantics to the motor-side polarity expected by STM32.
+constexpr std::array<float, kJointCount> kCommandEffortSigns = {
+    1.0f,
+    1.0f,
+    -1.0f,
+    1.0f,
+    1.0f,
+    -1.0f,
+};
 
 speed_t ToTermiosBaudRate(int baud_rate) {
   switch (baud_rate) {
@@ -733,7 +742,8 @@ class Stm32BridgeNode : public rclcpp::Node {
     payload[0] = command_enable ? 1u : 0u;
     payload[1] = estop_active ? 1u : 0u;
     for (std::size_t i = 0; i < kJointCount; ++i) {
-      const float effort = command_enable ? efforts[i] : 0.0f;
+      const float effort =
+          command_enable ? efforts[i] * kCommandEffortSigns[i] : 0.0f;
       WriteF32Le(payload.data() + 2u + i * sizeof(float), effort);
     }
 

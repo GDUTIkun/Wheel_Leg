@@ -271,7 +271,52 @@ ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
 - 下一步：验证 left_hip -0.2Nm 和 square 模式
 ```
 
-### 9.9 通过标准
+### 9.9 2026-06-25 极性测试记录
+
+本轮已完成一次六电机悬空极性验证，测试期间 bridge 通信保持正常，验证后已手动停机。
+
+记录如下：
+
+```text
+- 日期：2026-06-25
+- 硬件状态：机器人悬空 / UART4<->USART2 正常 / bridge state=ok
+- 修改参数/代码：
+  - 不修改 STM32 侧代码
+  - 在 ROS bridge 下行命令路径加入轮子力矩极性修正
+  - 修改文件：
+    ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_bridge_node.cpp
+  - 新增下行符号表 kCommandEffortSigns
+  - 轮子修正前：
+    left_wheel=+1
+    right_wheel=+1
+  - 轮子修正后：
+    left_wheel=-1
+    right_wheel=-1
+- 测试方式：
+  - 使用 joint_command_probe_node 逐个关节下发恒定力矩
+  - 六电机验证采用每路持续 5s 的方式现场观察转向
+  - 轮子为便于观察，单独补做了 5s、6s、10s 的重复测试
+- 现场结论：
+  - 极性测试完毕
+  - 轮子最终不修改 STM32 侧代码，只在 ROS bridge 下行力矩处做极性修正
+  - 当前 ROS->STM32 下行力矩符号表为：
+    left_hip=+1
+    left_knee=+1
+    left_wheel=-1
+    right_hip=+1
+    right_knee=+1
+    right_wheel=-1
+  - 对应实现位置：
+    ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_bridge_node.cpp
+- 安全状态：
+  - 每轮测试结束后 probe 节点退出
+  - bridge 在测试完成后手动停止
+  - 测试窗口内未观察到 bridge CRC / 长度 / 同步错误持续增长
+```
+
+后续若继续修正髋、膝或轮子的方向定义，应优先修改 ROS bridge 的下行力矩符号表，不直接把安装方向差异泄漏到上层控制器。
+
+### 9.10 通过标准
 
 通信完成后的这一步，至少满足以下条件才进入下一阶段：
 
