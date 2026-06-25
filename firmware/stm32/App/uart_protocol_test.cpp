@@ -19,7 +19,7 @@ enum RxState {
 };
 
 extern "C" {
-volatile UartProtocolTestStats uart1_protocol_test_stats = {
+volatile UartProtocolTestStats uart2_protocol_test_stats = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFFFFFFFFu, 0
 };
 }
@@ -74,33 +74,33 @@ void ResetParser()
 void MarkFrameOk()
 {
     const uint32_t now = HAL_GetTick();
-    if (uart1_protocol_test_stats.last_frame_tick_ms != 0u) {
-        const uint32_t gap = now - uart1_protocol_test_stats.last_frame_tick_ms;
-        if (gap < uart1_protocol_test_stats.min_frame_gap_ms) {
-            uart1_protocol_test_stats.min_frame_gap_ms = gap;
+    if (uart2_protocol_test_stats.last_frame_tick_ms != 0u) {
+        const uint32_t gap = now - uart2_protocol_test_stats.last_frame_tick_ms;
+        if (gap < uart2_protocol_test_stats.min_frame_gap_ms) {
+            uart2_protocol_test_stats.min_frame_gap_ms = gap;
         }
-        if (gap > uart1_protocol_test_stats.max_frame_gap_ms) {
-            uart1_protocol_test_stats.max_frame_gap_ms = gap;
+        if (gap > uart2_protocol_test_stats.max_frame_gap_ms) {
+            uart2_protocol_test_stats.max_frame_gap_ms = gap;
         }
     }
 
-    uart1_protocol_test_stats.frames_ok++;
-    uart1_protocol_test_stats.last_seq = g_seq;
-    uart1_protocol_test_stats.last_type = g_frame_type;
-    uart1_protocol_test_stats.last_len = g_payload_len;
-    uart1_protocol_test_stats.last_frame_tick_ms = now;
+    uart2_protocol_test_stats.frames_ok++;
+    uart2_protocol_test_stats.last_seq = g_seq;
+    uart2_protocol_test_stats.last_type = g_frame_type;
+    uart2_protocol_test_stats.last_len = g_payload_len;
+    uart2_protocol_test_stats.last_frame_tick_ms = now;
 }
 
 void ConsumeByte(uint8_t byte)
 {
-    uart1_protocol_test_stats.rx_bytes++;
+    uart2_protocol_test_stats.rx_bytes++;
 
     switch (g_state) {
     case kHead0:
         if (byte == kFrameHead0) {
             g_state = kHead1;
         } else {
-            uart1_protocol_test_stats.sync_losses++;
+            uart2_protocol_test_stats.sync_losses++;
         }
         break;
 
@@ -108,7 +108,7 @@ void ConsumeByte(uint8_t byte)
         if (byte == kFrameHead1) {
             g_state = kType;
         } else {
-            uart1_protocol_test_stats.sync_losses++;
+            uart2_protocol_test_stats.sync_losses++;
             g_state = (byte == kFrameHead0) ? kHead1 : kHead0;
         }
         break;
@@ -121,7 +121,7 @@ void ConsumeByte(uint8_t byte)
     case kLen:
         g_payload_len = byte;
         if (g_payload_len > kMaxPayloadLen) {
-            uart1_protocol_test_stats.length_errors++;
+            uart2_protocol_test_stats.length_errors++;
             ResetParser();
         } else {
             g_payload_index = 0;
@@ -156,7 +156,7 @@ void ConsumeByte(uint8_t byte)
         if (g_rx_crc == CalculateFrameCrc()) {
             MarkFrameOk();
         } else {
-            uart1_protocol_test_stats.crc_errors++;
+            uart2_protocol_test_stats.crc_errors++;
         }
         ResetParser();
         break;
@@ -165,8 +165,8 @@ void ConsumeByte(uint8_t byte)
 
 void RestartReceive()
 {
-    if (HAL_UART_Receive_IT(&huart1, &g_rx_byte, 1) != HAL_OK) {
-        uart1_protocol_test_stats.uart_errors++;
+    if (HAL_UART_Receive_IT(&huart2, &g_rx_byte, 1) != HAL_OK) {
+        uart2_protocol_test_stats.uart_errors++;
     }
 }
 
@@ -186,42 +186,42 @@ extern "C" void UartProtocolTest_GetStats(UartProtocolTestStats *out)
     }
 
     __disable_irq();
-    out->rx_bytes = uart1_protocol_test_stats.rx_bytes;
-    out->frames_ok = uart1_protocol_test_stats.frames_ok;
-    out->crc_errors = uart1_protocol_test_stats.crc_errors;
-    out->length_errors = uart1_protocol_test_stats.length_errors;
-    out->sync_losses = uart1_protocol_test_stats.sync_losses;
-    out->uart_errors = uart1_protocol_test_stats.uart_errors;
-    out->last_seq = uart1_protocol_test_stats.last_seq;
-    out->last_type = uart1_protocol_test_stats.last_type;
-    out->last_len = uart1_protocol_test_stats.last_len;
-    out->last_frame_tick_ms = uart1_protocol_test_stats.last_frame_tick_ms;
-    out->min_frame_gap_ms = uart1_protocol_test_stats.min_frame_gap_ms;
-    out->max_frame_gap_ms = uart1_protocol_test_stats.max_frame_gap_ms;
+    out->rx_bytes = uart2_protocol_test_stats.rx_bytes;
+    out->frames_ok = uart2_protocol_test_stats.frames_ok;
+    out->crc_errors = uart2_protocol_test_stats.crc_errors;
+    out->length_errors = uart2_protocol_test_stats.length_errors;
+    out->sync_losses = uart2_protocol_test_stats.sync_losses;
+    out->uart_errors = uart2_protocol_test_stats.uart_errors;
+    out->last_seq = uart2_protocol_test_stats.last_seq;
+    out->last_type = uart2_protocol_test_stats.last_type;
+    out->last_len = uart2_protocol_test_stats.last_len;
+    out->last_frame_tick_ms = uart2_protocol_test_stats.last_frame_tick_ms;
+    out->min_frame_gap_ms = uart2_protocol_test_stats.min_frame_gap_ms;
+    out->max_frame_gap_ms = uart2_protocol_test_stats.max_frame_gap_ms;
     __enable_irq();
 }
 
 extern "C" void UartProtocolTest_ResetStats(void)
 {
     __disable_irq();
-    uart1_protocol_test_stats.rx_bytes = 0;
-    uart1_protocol_test_stats.frames_ok = 0;
-    uart1_protocol_test_stats.crc_errors = 0;
-    uart1_protocol_test_stats.length_errors = 0;
-    uart1_protocol_test_stats.sync_losses = 0;
-    uart1_protocol_test_stats.uart_errors = 0;
-    uart1_protocol_test_stats.last_seq = 0;
-    uart1_protocol_test_stats.last_type = 0;
-    uart1_protocol_test_stats.last_len = 0;
-    uart1_protocol_test_stats.last_frame_tick_ms = 0;
-    uart1_protocol_test_stats.min_frame_gap_ms = 0xFFFFFFFFu;
-    uart1_protocol_test_stats.max_frame_gap_ms = 0;
+    uart2_protocol_test_stats.rx_bytes = 0;
+    uart2_protocol_test_stats.frames_ok = 0;
+    uart2_protocol_test_stats.crc_errors = 0;
+    uart2_protocol_test_stats.length_errors = 0;
+    uart2_protocol_test_stats.sync_losses = 0;
+    uart2_protocol_test_stats.uart_errors = 0;
+    uart2_protocol_test_stats.last_seq = 0;
+    uart2_protocol_test_stats.last_type = 0;
+    uart2_protocol_test_stats.last_len = 0;
+    uart2_protocol_test_stats.last_frame_tick_ms = 0;
+    uart2_protocol_test_stats.min_frame_gap_ms = 0xFFFFFFFFu;
+    uart2_protocol_test_stats.max_frame_gap_ms = 0;
     __enable_irq();
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (huart->Instance == USART1) {
+    if (huart->Instance == USART2) {
         ConsumeByte(g_rx_byte);
         RestartReceive();
     }
@@ -229,8 +229,8 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-    if (huart->Instance == USART1) {
-        uart1_protocol_test_stats.uart_errors++;
+    if (huart->Instance == USART2) {
+        uart2_protocol_test_stats.uart_errors++;
         __HAL_UART_CLEAR_OREFLAG(huart);
         RestartReceive();
     }

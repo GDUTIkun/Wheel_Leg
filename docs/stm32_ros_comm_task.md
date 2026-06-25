@@ -47,7 +47,7 @@ wheel_leg_controller
 - 当前实测 STM32 读完一次传感器约在 `3ms` 以内，因此优先测试 `200Hz` 状态上报。
 - 最终状态上报频率由 STM32 传感器读取耗时、串口带宽、解包开销、丢包率和控制链稳定性共同决定。
 
-链路明确使用 UART/串口通信。当前 USART1 压测入口默认配置为 `921600 8N1`；若线缆、地线、树莓派串口和 STM32 侧错误计数都稳定，再继续测试 `1000000` 或 `2000000`。
+链路明确使用 UART/串口通信。当前 `USART2` 压测入口默认配置为 `921600 8N1`；若线缆、地线、树莓派串口和 STM32 侧错误计数都稳定，再继续测试 `1000000` 或 `2000000`。
 
 由于串口是字节流，不提供天然消息边界，STM32 侧和 ROS bridge 侧都必须手动解包：
 
@@ -194,14 +194,15 @@ ROS 侧统一单位：
 9. 测试 STM32 状态上报频率，从 `100Hz`、`200Hz` 开始，记录传感器读取耗时、串口占用、ROS 解包延迟、丢包和错误计数。
 10. 用悬空低力矩方式逐项验证六电机方向、单位、限幅和停机行为。
 
-当前已先在 STM32 侧加入 UART1 接收解包压测入口，用于模拟 ROS 命令帧接收是否跟得上：
+当前已先在 STM32 侧加入 `USART2` 接收解包压测入口，用于模拟 ROS 命令帧接收是否跟得上：
 
 - 文件：`firmware/stm32/App/uart_protocol_test.cpp`
-- 串口：`USART1`
+- 串口：`USART2`
 - 帧格式：`0xA5 0x5A type len seq_lo seq_hi payload crc_lo crc_hi`
 - CRC：`CRC16-CCITT`，初值 `0xFFFF`，覆盖 `type`、`len`、`seq` 和 `payload`
-- 统计：接收字节数、成功帧数、CRC 错误、长度错误、同步丢失、UART 错误、帧间隔；Keil Watch 可直接观察 `uart1_protocol_test_stats`
+- 统计：接收字节数、成功帧数、CRC 错误、长度错误、同步丢失、UART 错误、帧间隔；Keil Watch 可直接观察 `uart2_protocol_test_stats`
 - 上位机模拟发送工具：`tools/uart_frame_sender.py`
+- ROS 侧压测节点：`ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_uart_stress_node.cpp`
 
 ## 9. 验收场景
 
@@ -217,15 +218,15 @@ ROS 侧统一单位：
 
 ## 10. 树莓派 UART4 压测步骤
 
-本阶段建议用树莓派 UART4 对接 STM32 USART1，在树莓派/ROS 环境里跑协议帧压测。目标是先确认物理串口链路、波特率和两侧手动解包稳定，再接入正式 `wheel_leg_stm32_bridge`。
+本阶段建议用树莓派 UART4 对接 STM32 USART2，在树莓派/ROS 环境里跑协议帧压测。目标是先确认物理串口链路、波特率和两侧手动解包稳定，再接入正式 `wheel_leg_stm32_bridge`。
 
 ### 10.1 接线
 
 按 UART 交叉连接：
 
 ```text
-Raspberry Pi UART4 TX  -> STM32 USART1 RX / PA10
-Raspberry Pi UART4 RX  <- STM32 USART1 TX / PA9
+Raspberry Pi UART4 TX  -> STM32 USART2 RX / PA3
+Raspberry Pi UART4 RX  <- STM32 USART2 TX / PA2
 Raspberry Pi GND       -- STM32 GND
 ```
 
@@ -234,7 +235,7 @@ Raspberry Pi GND       -- STM32 GND
 - 必须共地。
 - 两侧都应使用 `3.3V TTL` 电平。
 - 不要把 TX 接 TX、RX 接 RX。
-- 当前 STM32 USART1 默认 `921600 8N1`。
+- 当前 STM32 USART2 默认 `921600 8N1`。
 
 树莓派 UART 设备名以实际系统为准。当前工具默认会启用两个 UART overlay，并优先检测 `/dev/ttyAMA3`、`/dev/ttyAMA4`；本轮若指定 UART4，优先使用 `/dev/ttyAMA4`。
 
@@ -268,7 +269,7 @@ source /opt/ros/jazzy/setup.bash
 source ./ros2_ws/install/local_setup.bash
 ```
 
-从树莓派 UART4 向 STM32 USART1 发送模拟 ROS 命令帧：
+从树莓派 UART4 向 STM32 USART2 发送模拟 ROS 命令帧：
 
 ```bash
 ./tools/uart_frame_sender.py \
@@ -281,12 +282,52 @@ source ./ros2_ws/install/local_setup.bash
 
 如果系统中 UART4 不是 `/dev/ttyAMA4`，把 `--port` 改成实际设备。
 
+如果希望直接在 ROS 2 图里运行压测节点，先编译：
+
+```bash
+cd ~/wheel_leg_ws/ros2_ws
+colcon build --packages-select wheel_leg_stm32_bridge
+source ./install/local_setup.bash
+```
+
+然后启动 ROS 侧串口压测节点：
+
+```bash
+ros2 run wheel_leg_stm32_bridge stm32_uart_stress_node \
+  --ros-args \
+  -p serial_device:=/dev/ttyAMA4 \
+  -p baud_rate:=921600 \
+  -p rate_hz:=200.0 \
+  -p payload_len:=32 \
+  -p report_period_sec:=1.0
+```
+
+该节点会持续发送与 STM32 当前测试入口一致的协议帧，并发布：
+
+- `/stm32_bridge/uart_stress/status_text`
+- `/stm32_bridge/uart_stress/counters`
+
+其中 `counters` 字段顺序固定为：
+
+```text
+frames_attempted, frames_sent, bytes_sent, write_errors, partial_writes, deadline_misses, last_seq
+```
+
+ROS 侧重点关注：
+
+- `frames_sent / frames_attempted` 是否持续接近 `1.0`
+- `write_errors == 0`
+- `partial_writes == 0`
+- `deadline_misses` 是否持续增长
+
+如果只看终端日志，不订阅 topic 也可以；节点每 2 秒会输出一次统计摘要。
+
 ### 10.4 STM32 侧观察项
 
 在 Keil Watch 中观察：
 
 ```text
-uart1_protocol_test_stats
+uart2_protocol_test_stats
 ```
 
 重点看：
@@ -347,6 +388,7 @@ UartProtocolTest_ResetStats();
 
 - 如果测试前用串口调试助手发过普通文本，`sync_losses` 可能已经增加；这不代表协议帧丢包。正式压测前先清零统计。
 - 当前 STM32 接收实现是单字节中断接收，用于先验证链路和最坏情况下的解包开销。若高频或大 payload 下 `uart_errors` 增加，下一步改为 DMA 环形缓冲，但仍然保持手动解包。
+- ROS 侧若在 `921600` 下已经出现 `write_errors`、`partial_writes` 或明显的 `deadline_misses`，先优先排查 UART4 设备名、串口权限、overlay 配置和串口占用情况。
 
 ## 11. 与现有文档关系
 

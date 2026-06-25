@@ -23,7 +23,7 @@ typedef struct
     uint32_t max_frame_gap_ms;
 } UartProtocolTestStats;
 
-extern volatile UartProtocolTestStats uart1_protocol_test_stats;
+extern volatile UartProtocolTestStats uart2_protocol_test_stats;
 
 void UartProtocolTest_Init(void);
 void UartProtocolTest_GetStats(UartProtocolTestStats *out);
