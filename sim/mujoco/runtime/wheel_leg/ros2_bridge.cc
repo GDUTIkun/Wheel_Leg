@@ -31,6 +31,7 @@ namespace {
 
 constexpr double kCommandTimeoutSec = 0.2;
 constexpr const char* kNodeName = "mujoco_bridge";
+constexpr double kDefaultRobotStatePublishRateHz = 100.0;
 
 #ifdef WHEEL_LEG_ENABLE_ROS2
 
@@ -152,6 +153,8 @@ class Ros2Bridge {
     node_ = std::make_shared<rclcpp::Node>(kNodeName);
     enable_ros_command_ =
         node_->declare_parameter<bool>("enable_ros_command", false);
+    robot_state_publish_rate_hz_ = node_->declare_parameter<double>(
+        "robot_state_publish_rate_hz", kDefaultRobotStatePublishRateHz);
     joint_state_pub_ =
         node_->create_publisher<sensor_msgs::msg::JointState>(
             "/joint_states", rclcpp::SystemDefaultsQoS());
@@ -171,7 +174,9 @@ class Ros2Bridge {
     std::cout << "ROS2 MuJoCo bridge ready: node=" << kNodeName
               << ", topics=/joint_states,/imu,/robot_state,/joint_command"
               << ", enable_ros_command="
-              << (enable_ros_command_ ? "true" : "false") << std::endl;
+              << (enable_ros_command_ ? "true" : "false")
+              << ", robot_state_publish_rate_hz="
+              << robot_state_publish_rate_hz_ << std::endl;
   }
 
   ~Ros2Bridge() {
@@ -187,6 +192,8 @@ class Ros2Bridge {
     }
     rclcpp::spin_some(node_);
     enable_ros_command_ = node_->get_parameter("enable_ros_command").as_bool();
+    robot_state_publish_rate_hz_ = node_->get_parameter(
+        "robot_state_publish_rate_hz").as_double();
     if (pending_command_update_) {
       pending_command_update_ = false;
       latest_command_sim_time_ = sim_time;
@@ -198,7 +205,9 @@ class Ros2Bridge {
     if (!node_ || !rclcpp::ok() || !m || !d) {
       return;
     }
-    PublishRobotState(m, d);
+    if (ShouldPublishRobotState(d->time)) {
+      PublishRobotState(m, d);
+    }
     PublishJointState(m, d);
     PublishImu(m, d);
   }
@@ -311,6 +320,25 @@ class Ros2Bridge {
     robot_state_pub_->publish(ros_state);
   }
 
+  bool ShouldPublishRobotState(double sim_time) {
+    if (robot_state_publish_rate_hz_ <= 0.0) {
+      return true;
+    }
+    if (last_robot_state_publish_time_sec_ < 0.0) {
+      last_robot_state_publish_time_sec_ = sim_time;
+      return true;
+    }
+
+    const double publish_period_sec = 1.0 / robot_state_publish_rate_hz_;
+    if (sim_time - last_robot_state_publish_time_sec_ + 1e-12 <
+        publish_period_sec) {
+      return false;
+    }
+
+    last_robot_state_publish_time_sec_ = sim_time;
+    return true;
+  }
+
   bool ValidateCommand() {
     if (!latest_command_) {
       return false;
@@ -404,6 +432,8 @@ class Ros2Bridge {
   bool logged_robot_state_sample_ = false;
   bool robot_state_round_trip_checked_ = false;
   double latest_command_sim_time_ = 0.0;
+  double robot_state_publish_rate_hz_ = kDefaultRobotStatePublishRateHz;
+  double last_robot_state_publish_time_sec_ = -1.0;
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;

@@ -8,7 +8,7 @@ namespace wheel_leg_control {
 struct PidStepInput {
   double measurement = 0.0;
   double target = 0.0;
-  double dt = 0.002;
+  double dt = 0.01;
 };
 
 class PidAlgorithm {

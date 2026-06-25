@@ -12,7 +12,7 @@ namespace wheel_leg_stm32_bridge {
 class Stm32BridgeNode : public rclcpp::Node {
  public:
   Stm32BridgeNode() : rclcpp::Node("wheel_leg_stm32_bridge") {
-    publish_rate_hz_ = declare_parameter<double>("publish_rate_hz", 500.0);
+    publish_rate_hz_ = declare_parameter<double>("publish_rate_hz", 100.0);
     nominal_leg_length_ = declare_parameter<double>("nominal_leg_length", 0.28);
 
     robot_state_pub_ = create_publisher<wheel_leg_msgs::msg::StandControlState>(
@@ -48,7 +48,7 @@ class Stm32BridgeNode : public rclcpp::Node {
     robot_state_pub_->publish(state);
   }
 
-  double publish_rate_hz_ = 500.0;
+  double publish_rate_hz_ = 100.0;
   double nominal_leg_length_ = 0.28;
   rclcpp::Time last_joint_command_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Publisher<wheel_leg_msgs::msg::StandControlState>::SharedPtr

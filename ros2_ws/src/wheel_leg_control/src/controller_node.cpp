@@ -28,8 +28,8 @@
 namespace wheel_leg_control {
 namespace {
 
-constexpr double kMinAcceptedDtSec = 0.0015;
-constexpr double kMaxAcceptedDtSec = 0.0035;
+constexpr double kDefaultExpectedDtSec = 0.01;
+constexpr double kDefaultAcceptedDtToleranceSec = 0.0025;
 constexpr std::size_t kWarmupSamplesRequired = 3;
 constexpr std::size_t kDtDebugSamplesToLog = 5;
 constexpr std::size_t kDefaultTraceCapacity = 300;
@@ -236,6 +236,10 @@ class ControllerNode : public rclcpp::Node {
         declare_parameter<double>("debug_plot_publish_hz", 100.0);
     disabled_stops_publishing_ =
         declare_parameter<bool>("disabled_stops_publishing", true);
+    expected_dt_sec_ =
+        declare_parameter<double>("expected_dt_sec", kDefaultExpectedDtSec);
+    accepted_dt_tolerance_sec_ = declare_parameter<double>(
+        "accepted_dt_tolerance_sec", kDefaultAcceptedDtToleranceSec);
     declare_parameter<double>("publish_rate_hz", 500.0);
     RCLCPP_WARN(
         get_logger(),
@@ -369,6 +373,8 @@ class ControllerNode : public rclcpp::Node {
     double next_leg_length_ref_lpf_rc = leg_length_ref_lpf_rc_;
     double next_yaw_rate_assist_scale = yaw_rate_assist_scale_;
     double next_turn_hip_feedforward_scale = turn_hip_feedforward_scale_;
+    double next_expected_dt_sec = expected_dt_sec_;
+    double next_accepted_dt_tolerance_sec = accepted_dt_tolerance_sec_;
 
     for (const auto& parameter : parameters) {
       if (parameter.get_name() == "target_phi_deg") {
@@ -386,6 +392,27 @@ class ControllerNode : public rclcpp::Node {
         if (!std::isfinite(next_target_pitch_deg)) {
           result.successful = false;
           result.reason = "target_pitch_deg must be finite";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "expected_dt_sec") {
+        next_expected_dt_sec = parameter.as_double();
+        if (!std::isfinite(next_expected_dt_sec) || next_expected_dt_sec <= 0.0) {
+          result.successful = false;
+          result.reason = "expected_dt_sec must be finite and > 0";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "accepted_dt_tolerance_sec") {
+        next_accepted_dt_tolerance_sec = parameter.as_double();
+        if (!IsFiniteAndNonNegative(next_accepted_dt_tolerance_sec)) {
+          result.successful = false;
+          result.reason =
+              "accepted_dt_tolerance_sec must be finite and non-negative";
           return result;
         }
         continue;
@@ -488,12 +515,24 @@ class ControllerNode : public rclcpp::Node {
     leg_length_ref_lpf_rc_ = next_leg_length_ref_lpf_rc;
     yaw_rate_assist_scale_ = next_yaw_rate_assist_scale;
     turn_hip_feedforward_scale_ = next_turn_hip_feedforward_scale;
+    expected_dt_sec_ = next_expected_dt_sec;
+    accepted_dt_tolerance_sec_ = next_accepted_dt_tolerance_sec;
     orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
+    invalid_dt_warning_logged_ = false;
+    out_of_range_dt_warning_logged_ = false;
     return result;
   }
 
   bool IsFiniteAndNonNegative(double value) const {
     return std::isfinite(value) && value >= 0.0;
+  }
+
+  double MinAcceptedDtSec() const {
+    return std::max(0.0, expected_dt_sec_ - accepted_dt_tolerance_sec_);
+  }
+
+  double MaxAcceptedDtSec() const {
+    return expected_dt_sec_ + accepted_dt_tolerance_sec_;
   }
 
   LegacyPidConfig LoadPidConfig(
@@ -564,18 +603,20 @@ class ControllerNode : public rclcpp::Node {
       return;
     }
 
-    if (raw_dt < kMinAcceptedDtSec || raw_dt > kMaxAcceptedDtSec) {
+    const double min_accepted_dt_sec = MinAcceptedDtSec();
+    const double max_accepted_dt_sec = MaxAcceptedDtSec();
+    if (raw_dt < min_accepted_dt_sec || raw_dt > max_accepted_dt_sec) {
       if (!out_of_range_dt_warning_logged_) {
         RCLCPP_WARN(
             get_logger(),
-            "Ignoring /robot_state sample with out-of-range dt=%.9f; expected about 0.002 s",
-            raw_dt);
+            "Ignoring /robot_state sample with out-of-range dt=%.9f; expected %.9f s within [%.9f, %.9f]",
+            raw_dt, expected_dt_sec_, min_accepted_dt_sec, max_accepted_dt_sec);
         out_of_range_dt_warning_logged_ = true;
       }
       return;
     }
 
-    const double dt = std::clamp(raw_dt, kMinAcceptedDtSec, kMaxAcceptedDtSec);
+    const double dt = std::clamp(raw_dt, min_accepted_dt_sec, max_accepted_dt_sec);
     if (dt_debug_log_count_ < kDtDebugSamplesToLog) {
       ++dt_debug_log_count_;
       RCLCPP_INFO(
@@ -1377,6 +1418,8 @@ class ControllerNode : public rclcpp::Node {
   double yaw_rate_ref_slew_rate_ = 0.0;
   double leg_length_ref_lpf_rc_ = 0.0;
   double debug_plot_publish_hz_ = 0.0;
+  double expected_dt_sec_ = kDefaultExpectedDtSec;
+  double accepted_dt_tolerance_sec_ = kDefaultAcceptedDtToleranceSec;
   double velocity_mode_distance_ref_ = 0.0;
   double zero_hold_distance_ref_ = 0.0;
   double last_plot_publish_time_sec_ = -1.0;

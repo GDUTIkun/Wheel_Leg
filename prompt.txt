@@ -8,6 +8,11 @@
 cd ~/wheel_leg_ws
 ./scripts/run_host.sh sim
 ./scripts/run_pi.sh rc
+
+source scripts/env.sh
+ros2 param set /mujoco_bridge enable_ros_command true
+
+
 仅仿真
 ./scripts/run_host.sh sim_only
 
