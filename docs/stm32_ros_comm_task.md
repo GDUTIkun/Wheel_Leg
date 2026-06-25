@@ -201,28 +201,35 @@ ROS 侧统一单位：
 - 帧格式：`0xA5 0x5A type len seq_lo seq_hi payload crc_lo crc_hi`
 - CRC：`CRC16-CCITT`，初值 `0xFFFF`，覆盖 `type`、`len`、`seq` 和 `payload`
 - 下行压测：STM32 中断接收并统计接收字节数、成功帧数、CRC 错误、长度错误、同步丢失、序号跳变、UART 错误、帧间隔；Keil Watch 可直接观察 `uart2_protocol_test_stats`
-- 上行压测：STM32 同时以 `200Hz`（`5ms` 周期）主动回传 `type=0x81` 状态帧，payload 当前固定 `48` 字节，字段顺序如下：
+- 上行压测：STM32 同时以 `200Hz`（`5ms` 周期）主动回传 `type=0x81` 状态帧，payload 当前固定 `128` 字节，字段顺序如下：
 
 ```text
 u32 stm_tick_ms
-u32 rx_bytes
-u32 frames_ok
-u32 crc_errors
-u32 length_errors
-u32 sync_losses
-u32 rx_seq_gaps
-u32 uart_errors
-u16 last_rx_seq
-u8  last_rx_type
-u8  last_rx_len
-u32 min_frame_gap_ms
-u32 max_frame_gap_ms
-u32 last_rx_age_ms
+f32 roll
+f32 pitch
+f32 yaw
+f32 gyro_x
+f32 gyro_y
+f32 gyro_z
+f32 acc_x
+f32 acc_y
+f32 acc_z
+6 * f32 joint_position
+6 * f32 joint_velocity
+6 * f32 joint_effort
+u8  online_mask
+u8  safety_state
+u8  last_command_timeout
+u8  reserved0
+u32 comm_rx_error_count
+u32 comm_crc_error_count
+u32 can_error_count
 ```
 
 - 编码：所有多字节字段当前都按 little-endian 打包
 - 上位机模拟发送工具：`tools/uart_frame_sender.py`
 - ROS 侧压测节点：`ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_uart_stress_node.cpp`
+- `stm32_uart_stress_node` 现已兼容旧 `48` 字节诊断状态帧和当前 `128` 字节正式状态帧，避免因版本切换误判链路失败
 
 ## 9. 验收场景
 
@@ -342,6 +349,23 @@ ROS 侧重点关注：
 
 如果只看终端日志，不订阅 topic 也可以；节点每 2 秒会输出一次统计摘要。
 
+当前 `stm32_uart_stress_node` 对 `/stm32_bridge/uart_stress/stm32_status` 的发布规则为：
+
+- 若收到旧 `48` 字节诊断帧，字段顺序仍为：
+
+```text
+stm_tick_ms, rx_bytes, frames_ok, crc_errors, length_errors, sync_losses,
+rx_seq_gaps, uart_errors, last_rx_seq, last_rx_type, last_rx_len,
+min_frame_gap_ms, max_frame_gap_ms, last_rx_age_ms
+```
+
+- 若收到当前 `128` 字节正式状态帧，字段顺序为：
+
+```text
+stm_tick_ms, online_mask, safety_state, last_command_timeout,
+comm_rx_error_count, comm_crc_error_count, can_error_count
+```
+
 ### 10.4 STM32 侧观察项
 
 在 Keil Watch 中观察：
@@ -417,6 +441,17 @@ UartProtocolTest_ResetStats();
 - 本文档专门记录 STM32 与 ROS 第一版通信内容、字段和验收任务。
 
 ## 12. 实测记录
+
+### 2026-06-25 UART4 <-> USART2
+
+- 实测端口：树莓派 `/dev/ttyAMA4` 对接 STM32 `USART2`
+- 实测波特率：`921600 8N1`
+- 旧版 `stm32_uart_stress_node` 按 `48` 字节状态帧解包时表现为 `rx_ok=0`、`rx_sync` 持续增长，但原始串口抓包已能看到合法帧头 `a5 5a 81 80`，说明当时不是物理链路中断，而是 ROS 侧仍按旧状态帧格式解析
+- 正式 `wheel_leg_stm32_bridge_node` 现场验证通过：`/stm32_bridge/status_text` 为 `state=ok state_stale=false`，`/stm32_bridge/counters` 观测到 `rx_frames_ok=849` 且 `rx_crc_errors=0`、`rx_length_errors=0`、`rx_sync_losses=0`
+- 继续运行后，`/stm32_bridge/counters` 观测到 `rx_frames_ok=3101`，说明 STM32 到 ROS 上行通信稳定
+- ROS 侧向 `/joint_command` 发布全零六关节力矩命令后，bridge 侧 `tx_frames_sent` 从 `0` 增加到 `4`，说明 ROS 到 STM32 下行写串口正常
+- 当未持续发送命令时，状态中的 `safety=timeout` 为 STM32 `100ms` 命令超时保护的预期行为，不作为链路故障判据
+- 本次结论：`wheel_leg_stm32_bridge_node` 已可与当前 STM32 固件正常通信；`stm32_uart_stress_node` 需要与 `128` 字节状态帧保持兼容，避免误报
 
 ### 12.1 2026-06-25 UART4 <-> USART2 首轮联调
 

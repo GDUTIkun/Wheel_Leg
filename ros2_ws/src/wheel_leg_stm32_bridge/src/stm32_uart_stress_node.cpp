@@ -28,7 +28,11 @@ constexpr uint8_t kFrameHead0 = 0xA5;
 constexpr uint8_t kFrameHead1 = 0x5A;
 constexpr uint8_t kFrameTypeHostToStm = 0x01;
 constexpr uint8_t kFrameTypeStmStatus = 0x81;
-constexpr uint8_t kMaxPayloadLen = 96;
+constexpr uint8_t kMaxPayloadLen = 160;
+constexpr std::size_t kJointCount = 6;
+constexpr std::size_t kLegacyStatusPayloadSize = 48;
+constexpr std::size_t kCurrentStatusPayloadSize =
+    4 + 9 * sizeof(float) + kJointCount * 3 * sizeof(float) + 4 + 3 * 4;
 constexpr int kDefaultBaudRate = 921600;
 constexpr double kDefaultRateHz = 200.0;
 constexpr int kDefaultPayloadLen = 32;
@@ -36,19 +40,29 @@ constexpr double kDefaultReportPeriodSec = 1.0;
 
 struct Stm32StatusFrame {
   uint32_t stm_tick_ms = 0;
-  uint32_t rx_bytes = 0;
-  uint32_t frames_ok = 0;
-  uint32_t crc_errors = 0;
-  uint32_t length_errors = 0;
-  uint32_t sync_losses = 0;
-  uint32_t rx_seq_gaps = 0;
-  uint32_t uart_errors = 0;
-  uint16_t last_rx_seq = 0;
-  uint8_t last_rx_type = 0;
-  uint8_t last_rx_len = 0;
-  uint32_t min_frame_gap_ms = 0;
-  uint32_t max_frame_gap_ms = 0;
-  uint32_t last_rx_age_ms = 0;
+  bool legacy_layout = false;
+  std::array<float, kJointCount> joint_position {};
+  std::array<float, kJointCount> joint_velocity {};
+  std::array<float, kJointCount> joint_effort {};
+  uint8_t online_mask = 0;
+  uint8_t safety_state = 0;
+  uint8_t last_command_timeout = 0;
+  uint32_t comm_rx_error_count = 0;
+  uint32_t comm_crc_error_count = 0;
+  uint32_t can_error_count = 0;
+  uint32_t legacy_rx_bytes = 0;
+  uint32_t legacy_frames_ok = 0;
+  uint32_t legacy_crc_errors = 0;
+  uint32_t legacy_length_errors = 0;
+  uint32_t legacy_sync_losses = 0;
+  uint32_t legacy_rx_seq_gaps = 0;
+  uint32_t legacy_uart_errors = 0;
+  uint16_t legacy_last_rx_seq = 0;
+  uint8_t legacy_last_rx_type = 0;
+  uint8_t legacy_last_rx_len = 0;
+  uint32_t legacy_min_frame_gap_ms = 0;
+  uint32_t legacy_max_frame_gap_ms = 0;
+  uint32_t legacy_last_rx_age_ms = 0;
 };
 
 struct TxCounters {
@@ -146,6 +160,13 @@ uint32_t ReadU32Le(const uint8_t* data) {
          (static_cast<uint32_t>(data[3]) << 24);
 }
 
+float ReadF32Le(const uint8_t* data) {
+  const uint32_t raw = ReadU32Le(data);
+  float value = 0.0f;
+  std::memcpy(&value, &raw, sizeof(value));
+  return value;
+}
+
 std::vector<uint8_t> MakePayload(uint16_t seq, int payload_len) {
   std::vector<uint8_t> payload(static_cast<std::size_t>(payload_len), 0);
   for (int index = 0; index < payload_len; ++index) {
@@ -176,24 +197,57 @@ std::vector<uint8_t> BuildFrame(uint8_t frame_type, uint16_t seq, int payload_le
 
 bool DecodeStm32StatusPayload(const std::vector<uint8_t>& payload,
                               Stm32StatusFrame* frame) {
-  if (frame == nullptr || payload.size() != 48u) {
+  if (frame == nullptr) {
     return false;
   }
 
-  frame->stm_tick_ms = ReadU32Le(payload.data() + 0);
-  frame->rx_bytes = ReadU32Le(payload.data() + 4);
-  frame->frames_ok = ReadU32Le(payload.data() + 8);
-  frame->crc_errors = ReadU32Le(payload.data() + 12);
-  frame->length_errors = ReadU32Le(payload.data() + 16);
-  frame->sync_losses = ReadU32Le(payload.data() + 20);
-  frame->rx_seq_gaps = ReadU32Le(payload.data() + 24);
-  frame->uart_errors = ReadU32Le(payload.data() + 28);
-  frame->last_rx_seq = ReadU16Le(payload.data() + 32);
-  frame->last_rx_type = payload[34];
-  frame->last_rx_len = payload[35];
-  frame->min_frame_gap_ms = ReadU32Le(payload.data() + 36);
-  frame->max_frame_gap_ms = ReadU32Le(payload.data() + 40);
-  frame->last_rx_age_ms = ReadU32Le(payload.data() + 44);
+  if (payload.size() == kLegacyStatusPayloadSize) {
+    frame->legacy_layout = true;
+    frame->stm_tick_ms = ReadU32Le(payload.data() + 0);
+    frame->legacy_rx_bytes = ReadU32Le(payload.data() + 4);
+    frame->legacy_frames_ok = ReadU32Le(payload.data() + 8);
+    frame->legacy_crc_errors = ReadU32Le(payload.data() + 12);
+    frame->legacy_length_errors = ReadU32Le(payload.data() + 16);
+    frame->legacy_sync_losses = ReadU32Le(payload.data() + 20);
+    frame->legacy_rx_seq_gaps = ReadU32Le(payload.data() + 24);
+    frame->legacy_uart_errors = ReadU32Le(payload.data() + 28);
+    frame->legacy_last_rx_seq = ReadU16Le(payload.data() + 32);
+    frame->legacy_last_rx_type = payload[34];
+    frame->legacy_last_rx_len = payload[35];
+    frame->legacy_min_frame_gap_ms = ReadU32Le(payload.data() + 36);
+    frame->legacy_max_frame_gap_ms = ReadU32Le(payload.data() + 40);
+    frame->legacy_last_rx_age_ms = ReadU32Le(payload.data() + 44);
+    return true;
+  }
+
+  if (payload.size() != kCurrentStatusPayloadSize) {
+    return false;
+  }
+
+  std::size_t offset = 0;
+  frame->legacy_layout = false;
+  frame->stm_tick_ms = ReadU32Le(payload.data() + offset);
+  offset += 4;
+  offset += 9 * sizeof(float);
+
+  for (std::size_t i = 0; i < kJointCount; ++i) {
+    frame->joint_position[i] = ReadF32Le(payload.data() + offset);
+    offset += 4;
+    frame->joint_velocity[i] = ReadF32Le(payload.data() + offset);
+    offset += 4;
+    frame->joint_effort[i] = ReadF32Le(payload.data() + offset);
+    offset += 4;
+  }
+
+  frame->online_mask = payload[offset++];
+  frame->safety_state = payload[offset++];
+  frame->last_command_timeout = payload[offset++];
+  offset += 1;
+  frame->comm_rx_error_count = ReadU32Le(payload.data() + offset);
+  offset += 4;
+  frame->comm_crc_error_count = ReadU32Le(payload.data() + offset);
+  offset += 4;
+  frame->can_error_count = ReadU32Le(payload.data() + offset);
   return true;
 }
 
@@ -586,32 +640,61 @@ class Stm32UartStressNode : public rclcpp::Node {
       }
 
       std_msgs::msg::UInt32MultiArray stm_msg;
-      stm_msg.data = {
-          stm32_status.stm_tick_ms,
-          stm32_status.rx_bytes,
-          stm32_status.frames_ok,
-          stm32_status.crc_errors,
-          stm32_status.length_errors,
-          stm32_status.sync_losses,
-          stm32_status.rx_seq_gaps,
-          stm32_status.uart_errors,
-          static_cast<uint32_t>(stm32_status.last_rx_seq),
-          static_cast<uint32_t>(stm32_status.last_rx_type),
-          static_cast<uint32_t>(stm32_status.last_rx_len),
-          stm32_status.min_frame_gap_ms,
-          stm32_status.max_frame_gap_ms,
-          stm32_status.last_rx_age_ms};
+      if (stm32_status.legacy_layout) {
+        stm_msg.data = {
+            stm32_status.stm_tick_ms,
+            stm32_status.legacy_rx_bytes,
+            stm32_status.legacy_frames_ok,
+            stm32_status.legacy_crc_errors,
+            stm32_status.legacy_length_errors,
+            stm32_status.legacy_sync_losses,
+            stm32_status.legacy_rx_seq_gaps,
+            stm32_status.legacy_uart_errors,
+            static_cast<uint32_t>(stm32_status.legacy_last_rx_seq),
+            static_cast<uint32_t>(stm32_status.legacy_last_rx_type),
+            static_cast<uint32_t>(stm32_status.legacy_last_rx_len),
+            stm32_status.legacy_min_frame_gap_ms,
+            stm32_status.legacy_max_frame_gap_ms,
+            stm32_status.legacy_last_rx_age_ms};
+      } else {
+        stm_msg.data = {
+            stm32_status.stm_tick_ms,
+            static_cast<uint32_t>(stm32_status.online_mask),
+            static_cast<uint32_t>(stm32_status.safety_state),
+            static_cast<uint32_t>(stm32_status.last_command_timeout),
+            stm32_status.comm_rx_error_count,
+            stm32_status.comm_crc_error_count,
+            stm32_status.can_error_count};
+      }
       stm32_status_pub_->publish(stm_msg);
 
-      stm32_summary =
-          "stm_tick_ms=" + std::to_string(stm32_status.stm_tick_ms) +
-          " stm_rx_ok=" + std::to_string(stm32_status.frames_ok) +
-          " stm_crc=" + std::to_string(stm32_status.crc_errors) +
-          " stm_len=" + std::to_string(stm32_status.length_errors) +
-          " stm_sync=" + std::to_string(stm32_status.sync_losses) +
-          " stm_gap=" + std::to_string(stm32_status.rx_seq_gaps) +
-          " stm_uart=" + std::to_string(stm32_status.uart_errors) +
-          " stm_last_age_ms=" + std::to_string(stm32_status.last_rx_age_ms);
+      if (stm32_status.legacy_layout) {
+        stm32_summary =
+            std::string("stm_layout=legacy48") +
+            " stm_tick_ms=" + std::to_string(stm32_status.stm_tick_ms) +
+            " stm_rx_ok=" + std::to_string(stm32_status.legacy_frames_ok) +
+            " stm_crc=" + std::to_string(stm32_status.legacy_crc_errors) +
+            " stm_len=" + std::to_string(stm32_status.legacy_length_errors) +
+            " stm_sync=" + std::to_string(stm32_status.legacy_sync_losses) +
+            " stm_gap=" + std::to_string(stm32_status.legacy_rx_seq_gaps) +
+            " stm_uart=" + std::to_string(stm32_status.legacy_uart_errors) +
+            " stm_last_age_ms=" + std::to_string(stm32_status.legacy_last_rx_age_ms);
+      } else {
+        stm32_summary =
+            std::string("stm_layout=current128") +
+            " stm_tick_ms=" + std::to_string(stm32_status.stm_tick_ms) +
+            " online_mask=0x" + [&stm32_status]() {
+              char buffer[5];
+              std::snprintf(
+                  buffer, sizeof(buffer), "%02X", stm32_status.online_mask);
+              return std::string(buffer);
+            }() +
+            " safety=" + std::to_string(stm32_status.safety_state) +
+            " timeout=" + std::to_string(stm32_status.last_command_timeout) +
+            " comm_rx_err=" + std::to_string(stm32_status.comm_rx_error_count) +
+            " comm_crc_err=" + std::to_string(stm32_status.comm_crc_error_count) +
+            " can_err=" + std::to_string(stm32_status.can_error_count);
+      }
     }
 
     std_msgs::msg::String status_msg;
