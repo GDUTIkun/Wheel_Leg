@@ -46,8 +46,8 @@ void Car_Init(void)
 {
     CAN_Init(&hfdcan1, Can_Callback_Function);
 
-    motor_3508_L.Init(&hfdcan1, Motor_DJI_ID_0x201);
-    motor_3508_R.Init(&hfdcan1, Motor_DJI_ID_0x202);
+    motor_3508_L.Init(&hfdcan1, Motor_DJI_ID_0x202);
+    motor_3508_R.Init(&hfdcan1, Motor_DJI_ID_0x201);
     motor_GIM6010_L_hip.Init(&hfdcan1, CAN_Motor_ID_0x4E, 0.0f);
     motor_GIM6010_L_knee.Init(&hfdcan1, CAN_Motor_ID_0x6E, 0.0f);
     motor_GIM6010_R_hip.Init(&hfdcan1, CAN_Motor_ID_0x2E, 0.0f);
@@ -305,12 +305,12 @@ void Can_Callback_Function(FDCAN_RxHeaderTypeDef &Header, uint8_t *Buffer)
     {
     case (0x201):
     {
-        motor_3508_L.CAN_RxCpltCallback();
+        motor_3508_R.CAN_RxCpltCallback();
         break;
     }
     case (0x202):
     {
-        motor_3508_R.CAN_RxCpltCallback();
+        motor_3508_L.CAN_RxCpltCallback();
         break;
     }
     case 0x29:
