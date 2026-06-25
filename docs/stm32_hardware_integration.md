@@ -386,3 +386,39 @@ ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
 - 未出现危险联动、异常冲击或持续通信错误
 
 满足以上条件后，再进入“轻触地验证”和后续低风险实机闭环调参。
+
+### 9.12 2026-06-26 ROS 侧关节限位高力矩急停保护
+
+本轮在 ROS bridge 侧补充了一条本地保护，不修改 STM32 侧代码。
+
+记录如下：
+
+```text
+- 日期：2026-06-26
+- 修改位置：
+  ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_bridge_node.cpp
+- 触发条件：
+  - 使用 STM32 状态帧回传的实际 joint_position / joint_effort 做判断
+  - 当关节到达限位，并且该关节实际回传力矩绝对值 > 3.0 Nm 时
+  - ROS bridge 触发本地 local estop，并立即向 STM32 下发 estop 命令帧
+- 当前默认限位口径：
+  - hip 使用世界角：
+    left_hip  = 75 ~ 200 deg
+    right_hip = 75 ~ 200 deg
+  - knee 使用相对角，不叠加 hip：
+    left_knee_relative  = -140 ~ -70 deg
+    right_knee_relative = -140 ~ -70 deg
+- 默认阈值来源：
+  - docs/leg_angle_mapping.md
+  - 其中明确记录：
+    hip_world_range = 75 ~ 200
+    knee_relative_range = -140 ~ -70
+- 当前实现说明：
+  - 该保护为 ROS 侧锁存急停；触发后即使后续命令继续下发，也会继续按 estop 发送
+  - /stm32_bridge/status_text 会额外显示：
+    local_estop=true
+    local_estop_reason=...
+  - 当前未实现自动解除，需要重启节点或后续再补显式复位机制
+```
+
+当前这条保护的目的不是替代 STM32 侧安全停机，而是在 ROS 侧增加一层“到限位仍持续顶力矩”的联调保护，降低悬空调试和轻触地调试阶段的风险。

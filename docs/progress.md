@@ -108,6 +108,7 @@
 - 待确认通信异常、遥控 failsafe 或控制异常时可以进入安全状态。
 - 待确认初次调试时可以使用悬空、低力矩、单关节方式逐项验证。
 - 待验证 `RC ch7 -> /rc/status.estop_active -> bridge estop=1 -> STM32 整车失能` 整链行为。
+- `2026-06-26` 已在 `wheel_leg_stm32_bridge` 增加 ROS 侧本地限位保护：当 hip 世界角或 knee 相对角到达文档记录的机械限位，且该关节实际回传力矩绝对值大于 `3Nm` 时，bridge 锁存 `local_estop` 并持续向 STM32 下发 `estop`。
 
 ### 7.4 传感器方向与单位
 

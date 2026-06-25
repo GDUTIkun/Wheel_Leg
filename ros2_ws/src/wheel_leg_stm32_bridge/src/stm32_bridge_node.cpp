@@ -48,6 +48,7 @@ constexpr std::size_t kStatePayloadSize =
     4 + 9 * sizeof(float) + kJointCount * 3 * sizeof(float) + 4 + 3 * 4;
 constexpr std::size_t kMaxPayloadLen = 160;
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kDegreesPerRadian = 180.0 / kPi;
 constexpr double kWheelRadius = 0.05;
 constexpr double kL1 = 0.18;
 constexpr double kL2 = 0.225;
@@ -149,6 +150,10 @@ void WriteF32Le(uint8_t* data, float value) {
 
 double DegreesToRadians(double degrees) {
   return degrees * kPi / 180.0;
+}
+
+double RadiansToDegrees(double radians) {
+  return radians * kDegreesPerRadian;
 }
 
 double NormalizeAngleDelta(double angle_delta) {
@@ -277,6 +282,18 @@ JointKinematics ComputeJointKinematics(
   return output;
 }
 
+struct JointLimitProtectionConfig {
+  double effort_threshold_nm = 3.0;
+  double left_hip_min_rad = DegreesToRadians(75.0);
+  double left_hip_max_rad = DegreesToRadians(200.0);
+  double right_hip_min_rad = DegreesToRadians(75.0);
+  double right_hip_max_rad = DegreesToRadians(200.0);
+  double left_knee_relative_min_rad = DegreesToRadians(-140.0);
+  double left_knee_relative_max_rad = DegreesToRadians(-70.0);
+  double right_knee_relative_min_rad = DegreesToRadians(-140.0);
+  double right_knee_relative_max_rad = DegreesToRadians(-70.0);
+};
+
 bool DecodeStatePayload(
     const std::vector<uint8_t>& payload,
     ProtocolStateFrame* frame) {
@@ -360,6 +377,36 @@ class Stm32BridgeNode : public rclcpp::Node {
     publish_joint_states_ =
         declare_parameter<bool>("publish_joint_states", true);
     status_period_sec_ = declare_parameter<double>("status_period_sec", 0.5);
+    joint_limit_protection_.effort_threshold_nm =
+        declare_parameter<double>("joint_limit_protection.effort_threshold_nm", 3.0);
+    joint_limit_protection_.left_hip_min_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.left_hip_min_rad", DegreesToRadians(75.0));
+    joint_limit_protection_.left_hip_max_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.left_hip_max_rad", DegreesToRadians(200.0));
+    joint_limit_protection_.right_hip_min_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.right_hip_min_rad", DegreesToRadians(75.0));
+    joint_limit_protection_.right_hip_max_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.right_hip_max_rad", DegreesToRadians(200.0));
+    joint_limit_protection_.left_knee_relative_min_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.left_knee_relative_min_rad",
+            DegreesToRadians(-140.0));
+    joint_limit_protection_.left_knee_relative_max_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.left_knee_relative_max_rad",
+            DegreesToRadians(-70.0));
+    joint_limit_protection_.right_knee_relative_min_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.right_knee_relative_min_rad",
+            DegreesToRadians(-140.0));
+    joint_limit_protection_.right_knee_relative_max_rad =
+        declare_parameter<double>(
+            "joint_limit_protection.right_knee_relative_max_rad",
+            DegreesToRadians(-70.0));
 
     robot_state_pub_ = create_publisher<wheel_leg_msgs::msg::StandControlState>(
         "/robot_state", rclcpp::SystemDefaultsQoS());
@@ -586,7 +633,88 @@ class Stm32BridgeNode : public rclcpp::Node {
     PublishDecodedState(decoded);
   }
 
+  void TriggerLocalEstop(const std::string& reason) {
+    bool should_send_estop = false;
+    {
+      std::scoped_lock lock(local_estop_mutex_);
+      if (!local_estop_active_) {
+        local_estop_active_ = true;
+        local_estop_reason_ = reason;
+        should_send_estop = true;
+      }
+    }
+
+    if (should_send_estop) {
+      RCLCPP_ERROR(get_logger(), "Local estop triggered: %s", reason.c_str());
+      SendCommandFrame({}, true);
+    }
+  }
+
+  void CheckJointLimitProtection(const ProtocolStateFrame& decoded) {
+    const double effort_threshold =
+        std::abs(joint_limit_protection_.effort_threshold_nm);
+    if (effort_threshold <= 0.0) {
+      return;
+    }
+
+    const double left_knee_relative =
+        NormalizeAngleDelta(decoded.joint_position[1] - decoded.joint_position[0]);
+    const double right_knee_relative =
+        NormalizeAngleDelta(decoded.joint_position[4] - decoded.joint_position[3]);
+
+    const auto trigger_if_needed =
+        [this, effort_threshold](
+            std::string_view joint_name,
+            double observed_position_rad,
+            double min_position_rad,
+            double max_position_rad,
+            double observed_effort_nm) {
+          if (std::abs(observed_effort_nm) <= effort_threshold) {
+            return;
+          }
+          if (observed_position_rad > min_position_rad &&
+              observed_position_rad < max_position_rad) {
+            return;
+          }
+
+          std::ostringstream reason;
+          reason << joint_name << " limit hit: pos_deg="
+                 << RadiansToDegrees(observed_position_rad)
+                 << " range_deg=[" << RadiansToDegrees(min_position_rad) << ", "
+                 << RadiansToDegrees(max_position_rad) << "] effort_nm="
+                 << observed_effort_nm << " threshold_nm=" << effort_threshold;
+          TriggerLocalEstop(reason.str());
+        };
+
+    trigger_if_needed(
+        "left_hip",
+        decoded.joint_position[0],
+        joint_limit_protection_.left_hip_min_rad,
+        joint_limit_protection_.left_hip_max_rad,
+        decoded.joint_effort[0]);
+    trigger_if_needed(
+        "right_hip",
+        decoded.joint_position[3],
+        joint_limit_protection_.right_hip_min_rad,
+        joint_limit_protection_.right_hip_max_rad,
+        decoded.joint_effort[3]);
+    trigger_if_needed(
+        "left_knee_relative",
+        left_knee_relative,
+        joint_limit_protection_.left_knee_relative_min_rad,
+        joint_limit_protection_.left_knee_relative_max_rad,
+        decoded.joint_effort[1]);
+    trigger_if_needed(
+        "right_knee_relative",
+        right_knee_relative,
+        joint_limit_protection_.right_knee_relative_min_rad,
+        joint_limit_protection_.right_knee_relative_max_rad,
+        decoded.joint_effort[4]);
+  }
+
   void PublishDecodedState(const ProtocolStateFrame& decoded) {
+    CheckJointLimitProtection(decoded);
+
     const rclcpp::Time stamp = now();
     wheel_leg_common::JointStateSample joint_sample;
     const int64_t stamp_ns = stamp.nanoseconds();
@@ -730,6 +858,10 @@ class Stm32BridgeNode : public rclcpp::Node {
         estop_active = latest_rc_status_.estop_active;
       }
     }
+    {
+      std::scoped_lock lock(local_estop_mutex_);
+      estop_active = estop_active || local_estop_active_;
+    }
 
     SendCommandFrame(canonical_efforts, estop_active);
   }
@@ -829,6 +961,14 @@ class Stm32BridgeNode : public rclcpp::Node {
       std::scoped_lock lock(rc_status_mutex_);
       estop_active = have_rc_status_ && latest_rc_status_.estop_active;
     }
+    std::string local_estop_reason;
+    bool local_estop_active = false;
+    {
+      std::scoped_lock lock(local_estop_mutex_);
+      local_estop_active = local_estop_active_;
+      local_estop_reason = local_estop_reason_;
+    }
+    estop_active = estop_active || local_estop_active;
 
     std_msgs::msg::String text_msg;
     std::ostringstream status;
@@ -837,7 +977,11 @@ class Stm32BridgeNode : public rclcpp::Node {
            << " command_stale=" << (command_stale ? "true" : "false")
            << " command_enable=" << (command_enable_ ? "true" : "false")
            << " safety=" << SafetyStateToString(latest_state.safety_state)
-           << " estop=" << (estop_active ? "true" : "false");
+           << " estop=" << (estop_active ? "true" : "false")
+           << " local_estop=" << (local_estop_active ? "true" : "false");
+    if (local_estop_active && !local_estop_reason.empty()) {
+      status << " local_estop_reason=" << local_estop_reason;
+    }
     text_msg.data = status.str();
     status_text_pub_->publish(text_msg);
   }
@@ -850,11 +994,13 @@ class Stm32BridgeNode : public rclcpp::Node {
   bool publish_imu_ = true;
   bool publish_joint_states_ = true;
   double status_period_sec_ = 0.0;
+  JointLimitProtectionConfig joint_limit_protection_;
   int serial_fd_ = -1;
   std::atomic<bool> running_{false};
   std::thread reader_thread_;
   std::mutex serial_mutex_;
   std::mutex cache_mutex_;
+  std::mutex local_estop_mutex_;
   std::vector<uint8_t> rx_buffer_;
   ProtocolCache cache_;
   BridgeCounters counters_;
@@ -863,6 +1009,8 @@ class Stm32BridgeNode : public rclcpp::Node {
   std::mutex rc_status_mutex_;
   wheel_leg_msgs::msg::RcStatus latest_rc_status_;
   bool have_rc_status_ = false;
+  bool local_estop_active_ = false;
+  std::string local_estop_reason_;
 
   rclcpp::Publisher<wheel_leg_msgs::msg::StandControlState>::SharedPtr
       robot_state_pub_;
