@@ -346,6 +346,7 @@ class Stm32BridgeNode : public rclcpp::Node {
     state_timeout_sec_ = declare_parameter<double>("state_timeout_sec", 0.1);
     command_timeout_sec_ =
         declare_parameter<double>("command_timeout_sec", 0.1);
+    command_enable_ = declare_parameter<bool>("command_enable", false);
     publish_imu_ = declare_parameter<bool>("publish_imu", true);
     publish_joint_states_ =
         declare_parameter<bool>("publish_joint_states", true);
@@ -728,10 +729,11 @@ class Stm32BridgeNode : public rclcpp::Node {
       const std::array<float, kJointCount>& efforts,
       bool estop_active) {
     std::array<uint8_t, kCommandPayloadSize> payload {};
-    payload[0] = estop_active ? 0u : 1u;
+    const bool command_enable = command_enable_ && !estop_active;
+    payload[0] = command_enable ? 1u : 0u;
     payload[1] = estop_active ? 1u : 0u;
     for (std::size_t i = 0; i < kJointCount; ++i) {
-      const float effort = estop_active ? 0.0f : efforts[i];
+      const float effort = command_enable ? efforts[i] : 0.0f;
       WriteF32Le(payload.data() + 2u + i * sizeof(float), effort);
     }
 
@@ -823,6 +825,7 @@ class Stm32BridgeNode : public rclcpp::Node {
     status << "state=" << (have_state ? "ok" : "missing")
            << " state_stale=" << (state_stale ? "true" : "false")
            << " command_stale=" << (command_stale ? "true" : "false")
+           << " command_enable=" << (command_enable_ ? "true" : "false")
            << " safety=" << SafetyStateToString(latest_state.safety_state)
            << " estop=" << (estop_active ? "true" : "false");
     text_msg.data = status.str();
@@ -833,6 +836,7 @@ class Stm32BridgeNode : public rclcpp::Node {
   int baud_rate_ = 0;
   double state_timeout_sec_ = 0.0;
   double command_timeout_sec_ = 0.0;
+  bool command_enable_ = false;
   bool publish_imu_ = true;
   bool publish_joint_states_ = true;
   double status_period_sec_ = 0.0;

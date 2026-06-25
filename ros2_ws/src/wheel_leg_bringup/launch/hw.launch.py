@@ -11,6 +11,7 @@ def generate_launch_description():
     baud_rate = LaunchConfiguration("baud_rate")
     state_timeout_sec = LaunchConfiguration("state_timeout_sec")
     command_timeout_sec = LaunchConfiguration("command_timeout_sec")
+    command_enable = LaunchConfiguration("command_enable")
     publish_imu = LaunchConfiguration("publish_imu")
     publish_joint_states = LaunchConfiguration("publish_joint_states")
 
@@ -21,6 +22,7 @@ def generate_launch_description():
             DeclareLaunchArgument("baud_rate", default_value="921600"),
             DeclareLaunchArgument("state_timeout_sec", default_value="0.1"),
             DeclareLaunchArgument("command_timeout_sec", default_value="0.1"),
+            DeclareLaunchArgument("command_enable", default_value="false"),
             DeclareLaunchArgument("publish_imu", default_value="true"),
             DeclareLaunchArgument("publish_joint_states", default_value="true"),
             Node(
@@ -35,6 +37,7 @@ def generate_launch_description():
                         "baud_rate": baud_rate,
                         "state_timeout_sec": state_timeout_sec,
                         "command_timeout_sec": command_timeout_sec,
+                        "command_enable": command_enable,
                         "publish_imu": publish_imu,
                         "publish_joint_states": publish_joint_states,
                     }

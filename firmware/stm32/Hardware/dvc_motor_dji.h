@@ -374,6 +374,36 @@ inline void Class_Motor_DJI_GIM6010::Set_Feedforward_Torque(const float &__Feedf
 }
 
 /**
+ * @brief 获取电机状态
+ *
+ * @return Enum_Motor_DJI_Status 电机状态
+ */
+inline Enum_Motor_DJI_Status Class_Motor_DJI_C620::Get_Status() const
+{
+    return (Motor_DJI_Status);
+}
+
+/**
+ * @brief 获取当前的角度, rad
+ *
+ * @return float 当前的角度, rad
+ */
+inline float Class_Motor_DJI_C620::Get_Now_Angle() const
+{
+    return (Rx_Data.Now_Angle);
+}
+
+/**
+ * @brief 获取当前的速度, rad/s
+ *
+ * @return float 当前的速度, rad/s
+ */
+inline float Class_Motor_DJI_C620::Get_Now_Omega() const
+{
+    return (Rx_Data.Now_Omega);
+}
+
+/**
  * @brief 获取当前的扭矩, Nm
  *
  * @return float 当前的扭矩, Nm
