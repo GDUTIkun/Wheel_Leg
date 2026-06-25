@@ -114,9 +114,9 @@ void Car_Start(void* pv)
 执行的任务
 ==============================================*/
 
-double gyx, gyy, gyz, y;
-double accx, accy, accz;
-double imu_roll, imu_pitch, imu_yaw;
+volatile float gyx, gyy, gyz, y;
+volatile float accx, accy, accz;
+volatile float imu_roll, imu_pitch, imu_yaw;
 
 void Data_Task(void* pv)
 {
@@ -124,9 +124,31 @@ void Data_Task(void* pv)
     
     while(1)
     {
-        JY901S_Acc(&accx, &accy,&accz);
-        JY901S_Gyro(&gyx, &gyy, &gyz, &y);
-        JY901S_Angle(&imu_roll, &imu_pitch, &imu_yaw);
+        double accx_raw = 0.0;
+        double accy_raw = 0.0;
+        double accz_raw = 0.0;
+        double gyx_raw = 0.0;
+        double gyy_raw = 0.0;
+        double gyz_raw = 0.0;
+        double y_raw = static_cast<double>(y);
+        double imu_roll_raw = 0.0;
+        double imu_pitch_raw = 0.0;
+        double imu_yaw_raw = 0.0;
+
+        JY901S_Acc(&accx_raw, &accy_raw, &accz_raw);
+        JY901S_Gyro(&gyx_raw, &gyy_raw, &gyz_raw, &y_raw);
+        JY901S_Angle(&imu_roll_raw, &imu_pitch_raw, &imu_yaw_raw);
+
+        accx = static_cast<float>(accx_raw);
+        accy = static_cast<float>(accy_raw);
+        accz = static_cast<float>(accz_raw);
+        gyx = static_cast<float>(gyx_raw);
+        gyy = static_cast<float>(gyy_raw);
+        gyz = static_cast<float>(gyz_raw);
+        y = static_cast<float>(y_raw);
+        imu_roll = static_cast<float>(imu_roll_raw);
+        imu_pitch = static_cast<float>(imu_pitch_raw);
+        imu_yaw = static_cast<float>(imu_yaw_raw);
 
         xTaskNotifyGive(control_task_handle);//给控制任务通知
         xTaskDelayUntil(&pxPreviousWakeTime, 5);
@@ -239,12 +261,23 @@ void Debug_Task(void* pv)
         {
             last_report_tick = now;
             UartProtocolTest_GetStats(&stats);
-            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu last_rx=%u last_tx=%u\r\n",
+            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu busy=%lu to=%lu herr=%lu abort_rx=%lu tx_st=%u tx_ec=%lu g=%u rxs=%u isr=%08lx cr1=%08lx cr3=%08lx last_rx=%u last_tx=%u\r\n",
                    (unsigned long)stats.frames_ok,
                    (unsigned long)stats.crc_errors,
                    (unsigned long)stats.rx_seq_gaps,
                    (unsigned long)stats.tx_frames,
                    (unsigned long)stats.tx_errors,
+                   (unsigned long)stats.tx_busy_errors,
+                   (unsigned long)stats.tx_timeout_errors,
+                   (unsigned long)stats.tx_hal_error_errors,
+                   (unsigned long)stats.tx_abort_rx_count,
+                   (unsigned int)stats.last_tx_hal_status,
+                   (unsigned long)stats.last_tx_error_code,
+                   (unsigned int)stats.last_tx_gstate,
+                   (unsigned int)stats.last_tx_rxstate,
+                   (unsigned long)stats.last_tx_uart_isr,
+                   (unsigned long)stats.last_tx_uart_cr1,
+                   (unsigned long)stats.last_tx_uart_cr3,
                    (unsigned int)stats.last_seq,
                    (unsigned int)stats.last_tx_seq);
         }

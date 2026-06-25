@@ -19,13 +19,24 @@ typedef struct
     uint32_t tx_frames;
     uint32_t tx_bytes;
     uint32_t tx_errors;
+    uint32_t tx_busy_errors;
+    uint32_t tx_timeout_errors;
+    uint32_t tx_hal_error_errors;
+    uint32_t tx_abort_rx_count;
     uint16_t last_seq;
     uint16_t last_tx_seq;
     uint8_t last_type;
     uint8_t last_len;
+    uint8_t last_tx_hal_status;
+    uint8_t last_tx_gstate;
+    uint8_t last_tx_rxstate;
     uint32_t last_frame_tick_ms;
     uint32_t min_frame_gap_ms;
     uint32_t max_frame_gap_ms;
+    uint32_t last_tx_error_code;
+    uint32_t last_tx_uart_isr;
+    uint32_t last_tx_uart_cr1;
+    uint32_t last_tx_uart_cr3;
 } UartProtocolTestStats;
 
 extern volatile UartProtocolTestStats uart2_protocol_test_stats;

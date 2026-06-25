@@ -579,7 +579,7 @@ STM32 侧本轮已完成的代码改动：
 
 ### 12.4 2026-06-25 正式状态帧发送失败问题定位
 
-本轮未做代码修改，只记录基于最新抓包和 STM32 调试打印得到的问题定位结论。
+本节记录 `2026-06-25` 针对正式 `type=0x81` 状态帧发送异常的定位过程、结论以及临时绕过方案。
 
 现象一：ROS 侧 `/stm32_bridge/counters` 表现异常
 
@@ -628,7 +628,46 @@ uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=1387 last_rx=0 last_tx=0
 - 根因已经前移到 STM32 侧更前面的发送链路：`USART2` 正式状态帧发送本身持续失败。
 - ROS 侧观察到的 CRC 错误和同步丢失，更应视为下游症状，而不是主因。
 
+进一步诊断：
+
+- 在 STM32 侧为 `HAL_UART_Transmit(&huart2, ...)` 增加 `HAL_StatusTypeDef`、`HAL_UART_GetError()`、`huart2.gState`、`huart2.RxState` 诊断打印后，失败样例表现为：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=2377 busy=0 to=2377 herr=0 tx_st=3 tx_ec=0 g=32 rxs=34 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=2476 busy=0 to=2476 herr=0 tx_st=3 tx_ec=0 g=32 rxs=34 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=2575 busy=0 to=2575 herr=0 tx_st=3 tx_ec=0 g=32 rxs=34 last_rx=0 last_tx=0
+```
+
+- 这说明失败类型不是 `HAL_BUSY` 或 `HAL_ERROR`，而是稳定的 `HAL_TIMEOUT`。
+- `tx_ec=0` 说明当时没有新增 UART 硬件错误码。
+- `g=32` 对应 `HAL_UART_STATE_READY`，`rxs=34` 对应 `HAL_UART_STATE_BUSY_RX`，也就是 `USART2` 正长期挂着 `HAL_UART_Receive_IT(..., 1)` 的接收状态。
+- 该组合说明问题已进一步收敛到：同一个 `huart2` 上，持续 `Receive_IT` 与当前阻塞式 `HAL_UART_Transmit` 的组合会使发送侧在等待标志位时超时。
+
+临时绕过修改：
+
+- 在 `firmware/stm32/App/uart_protocol_test.cpp` 的 `TrySendStatusFrame()` 中，若发现 `huart2.RxState == HAL_UART_STATE_BUSY_RX`，先执行 `HAL_UART_AbortReceive_IT(&huart2)`。
+- 状态帧发送完成后，再调用 `RestartReceive()` 恢复单字节中断接收。
+- 同时把发送超时从 `5ms` 放宽到 `20ms`，并打印 `USART2->ISR`、`CR1`、`CR3` 快照。
+
+应用绕过后的调试打印样例：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1519 tx_err=0 busy=0 to=0 herr=0 abort_rx=1519 tx_st=0 tx_ec=0 g=32 rxs=34 isr=006000d0 cr1=0000000d cr3=00000000 last_rx=0 last_tx=1518
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1585 tx_err=0 busy=0 to=0 herr=0 abort_rx=1585 tx_st=0 tx_ec=0 g=32 rxs=34 isr=006000d0 cr1=0000000d cr3=00000000 last_rx=0 last_tx=1584
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1651 tx_err=0 busy=0 to=0 herr=0 abort_rx=1651 tx_st=0 tx_ec=0 g=32 rxs=34 isr=006000d0 cr1=0000000d cr3=00000000 last_rx=0 last_tx=1650
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1717 tx_err=0 busy=0 to=0 herr=0 abort_rx=1717 tx_st=0 tx_ec=0 g=32 rxs=34 isr=006000d0 cr1=0000000d cr3=00000000 last_rx=0 last_tx=1716
+```
+
+绕过后的结论：
+
+- `tx_err=0` 且 `tx` 持续增长，说明 STM32 `USART2` 正式状态帧上行发送已恢复正常。
+- `abort_rx` 与 `tx` 基本同步增长，进一步支持“持续 `Receive_IT` 与阻塞式 `Transmit` 冲突”这一根因判断。
+- 该修改证明本轮主要问题不在 CRC 算法、协议打包内容或物理 TX 线本身，而在 STM32 侧同一 UART 的收发方式组合。
+- 当前日志仍保持 `rx_ok=0`、`last_rx=0`，说明剩余问题已转移到下行命令未进入 STM32，不能再把当前链路问题归因到上行发送。
+
 当前记录状态：
 
-- 仅完成问题定位与证据记录。
-- 本节不包含任何代码修改。
+- 已完成正式状态帧发送失败的根因缩小与临时绕过验证。
+- 当前 `USART2` 上行状态发送恢复正常。
+- 当前仍待继续排查 ROS/树莓派到 STM32 的下行命令接收链路。
+- 当前“发送前 abort 接收、发送后重启接收”方案只作为联调阶段临时绕过，不建议直接作为最终正式实现。

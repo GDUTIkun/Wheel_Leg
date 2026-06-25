@@ -47,7 +47,7 @@ extern Class_Motor_DJI_GIM6010 motor_GIM6010_R_knee;
 
 extern "C" {
 volatile UartProtocolTestStats uart2_protocol_test_stats = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0u, 0xFFFFFFFFu, 0u
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0u, 0xFFFFFFFFu, 0u, 0u, 0u, 0u, 0u
 };
 }
 
@@ -366,6 +366,32 @@ void FillStatePayload(StatePayload *payload, uint32_t now)
         return;
     }
 
+    float roll = 0.0f;
+    float pitch = 0.0f;
+    float yaw = 0.0f;
+    float gyro_x = 0.0f;
+    float gyro_y = 0.0f;
+    float gyro_z = 0.0f;
+    float acc_x = 0.0f;
+    float acc_y = 0.0f;
+    float acc_z = 0.0f;
+    uint8_t safety_state = 0u;
+    uint8_t last_command_timeout = 0u;
+
+    __disable_irq();
+    roll = imu_roll;
+    pitch = imu_pitch;
+    yaw = imu_yaw;
+    gyro_x = gyx;
+    gyro_y = gyy;
+    gyro_z = gyz;
+    acc_x = accx;
+    acc_y = accy;
+    acc_z = accz;
+    safety_state = g_safety_state;
+    last_command_timeout = g_last_command_timeout;
+    __enable_irq();
+
     const uint8_t online_mask = BuildOnlineMask();
     const uint32_t can_error_count = BuildCanErrorCount(online_mask);
     const uint32_t comm_rx_error_count =
@@ -375,15 +401,15 @@ void FillStatePayload(StatePayload *payload, uint32_t now)
         uart2_protocol_test_stats.uart_errors;
 
     payload->stm_tick_ms = now;
-    payload->roll = static_cast<float>(imu_roll) * kDegreesToRadians;
-    payload->pitch = static_cast<float>(imu_pitch) * kDegreesToRadians;
-    payload->yaw = static_cast<float>(imu_yaw) * kDegreesToRadians;
-    payload->gyro_x = static_cast<float>(gyx) * kDegreesToRadians;
-    payload->gyro_y = static_cast<float>(gyy) * kDegreesToRadians;
-    payload->gyro_z = static_cast<float>(gyz) * kDegreesToRadians;
-    payload->acc_x = static_cast<float>(accx) * kGravityMps2;
-    payload->acc_y = static_cast<float>(accy) * kGravityMps2;
-    payload->acc_z = static_cast<float>(accz) * kGravityMps2;
+    payload->roll = roll * kDegreesToRadians;
+    payload->pitch = pitch * kDegreesToRadians;
+    payload->yaw = yaw * kDegreesToRadians;
+    payload->gyro_x = gyro_x * kDegreesToRadians;
+    payload->gyro_y = gyro_y * kDegreesToRadians;
+    payload->gyro_z = gyro_z * kDegreesToRadians;
+    payload->acc_x = acc_x * kGravityMps2;
+    payload->acc_y = acc_y * kGravityMps2;
+    payload->acc_z = acc_z * kGravityMps2;
 
     payload->joint_position[0] = motor_GIM6010_L_hip.Get_Now_Angle();
     payload->joint_position[1] = motor_GIM6010_L_knee.Get_Now_Angle();
@@ -407,9 +433,9 @@ void FillStatePayload(StatePayload *payload, uint32_t now)
     payload->joint_effort[5] = motor_3508_R.Get_Now_Torque();
 
     payload->online_mask = online_mask;
-    payload->safety_state = g_safety_state;
-    payload->last_command_timeout = g_last_command_timeout;
-    payload->reserved0 = 0u;
+    payload->safety_state = safety_state;
+    payload->last_command_timeout = last_command_timeout;
+    payload->reserved0 = knee_limit_flag;
     payload->comm_rx_error_count = comm_rx_error_count;
     payload->comm_crc_error_count = uart2_protocol_test_stats.crc_errors;
     payload->can_error_count = can_error_count;
@@ -483,13 +509,46 @@ void TrySendStatusFrame()
     WriteU16Le(g_status_frame + crc_index, crc);
 
     const uint16_t frame_len = static_cast<uint16_t>(crc_index + 2u);
-    if (HAL_UART_Transmit(&huart2, g_status_frame, frame_len, 5) == HAL_OK) {
+    bool rx_was_running = false;
+    if (huart2.RxState == HAL_UART_STATE_BUSY_RX) {
+        rx_was_running = true;
+        uart2_protocol_test_stats.tx_abort_rx_count++;
+        HAL_UART_AbortReceive_IT(&huart2);
+    }
+
+    const HAL_StatusTypeDef tx_status =
+        HAL_UART_Transmit(&huart2, g_status_frame, frame_len, 20);
+    uart2_protocol_test_stats.last_tx_uart_isr = huart2.Instance->ISR;
+    uart2_protocol_test_stats.last_tx_uart_cr1 = huart2.Instance->CR1;
+    uart2_protocol_test_stats.last_tx_uart_cr3 = huart2.Instance->CR3;
+
+    if (rx_was_running) {
+        RestartReceive();
+    }
+
+    if (tx_status == HAL_OK) {
         uart2_protocol_test_stats.tx_frames++;
         uart2_protocol_test_stats.tx_bytes += frame_len;
         uart2_protocol_test_stats.last_tx_seq = g_tx_seq;
+        uart2_protocol_test_stats.last_tx_hal_status = static_cast<uint8_t>(HAL_OK);
+        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(&huart2);
+        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart2.gState);
+        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart2.RxState);
         g_tx_seq = static_cast<uint16_t>(g_tx_seq + 1u);
     } else {
         uart2_protocol_test_stats.tx_errors++;
+        uart2_protocol_test_stats.last_tx_hal_status =
+            static_cast<uint8_t>(tx_status);
+        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(&huart2);
+        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart2.gState);
+        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart2.RxState);
+        if (tx_status == HAL_BUSY) {
+            uart2_protocol_test_stats.tx_busy_errors++;
+        } else if (tx_status == HAL_TIMEOUT) {
+            uart2_protocol_test_stats.tx_timeout_errors++;
+        } else if (tx_status == HAL_ERROR) {
+            uart2_protocol_test_stats.tx_hal_error_errors++;
+        }
     }
 }
 
@@ -535,13 +594,24 @@ extern "C" void UartProtocolTest_GetStats(UartProtocolTestStats *out)
     out->tx_frames = uart2_protocol_test_stats.tx_frames;
     out->tx_bytes = uart2_protocol_test_stats.tx_bytes;
     out->tx_errors = uart2_protocol_test_stats.tx_errors;
+    out->tx_busy_errors = uart2_protocol_test_stats.tx_busy_errors;
+    out->tx_timeout_errors = uart2_protocol_test_stats.tx_timeout_errors;
+    out->tx_hal_error_errors = uart2_protocol_test_stats.tx_hal_error_errors;
+    out->tx_abort_rx_count = uart2_protocol_test_stats.tx_abort_rx_count;
     out->last_seq = uart2_protocol_test_stats.last_seq;
     out->last_tx_seq = uart2_protocol_test_stats.last_tx_seq;
     out->last_type = uart2_protocol_test_stats.last_type;
     out->last_len = uart2_protocol_test_stats.last_len;
+    out->last_tx_hal_status = uart2_protocol_test_stats.last_tx_hal_status;
+    out->last_tx_gstate = uart2_protocol_test_stats.last_tx_gstate;
+    out->last_tx_rxstate = uart2_protocol_test_stats.last_tx_rxstate;
     out->last_frame_tick_ms = uart2_protocol_test_stats.last_frame_tick_ms;
     out->min_frame_gap_ms = uart2_protocol_test_stats.min_frame_gap_ms;
     out->max_frame_gap_ms = uart2_protocol_test_stats.max_frame_gap_ms;
+    out->last_tx_error_code = uart2_protocol_test_stats.last_tx_error_code;
+    out->last_tx_uart_isr = uart2_protocol_test_stats.last_tx_uart_isr;
+    out->last_tx_uart_cr1 = uart2_protocol_test_stats.last_tx_uart_cr1;
+    out->last_tx_uart_cr3 = uart2_protocol_test_stats.last_tx_uart_cr3;
     __enable_irq();
 }
 
@@ -558,13 +628,24 @@ extern "C" void UartProtocolTest_ResetStats(void)
     uart2_protocol_test_stats.tx_frames = 0u;
     uart2_protocol_test_stats.tx_bytes = 0u;
     uart2_protocol_test_stats.tx_errors = 0u;
+    uart2_protocol_test_stats.tx_busy_errors = 0u;
+    uart2_protocol_test_stats.tx_timeout_errors = 0u;
+    uart2_protocol_test_stats.tx_hal_error_errors = 0u;
+    uart2_protocol_test_stats.tx_abort_rx_count = 0u;
     uart2_protocol_test_stats.last_seq = 0u;
     uart2_protocol_test_stats.last_tx_seq = 0u;
     uart2_protocol_test_stats.last_type = 0u;
     uart2_protocol_test_stats.last_len = 0u;
+    uart2_protocol_test_stats.last_tx_hal_status = 0u;
+    uart2_protocol_test_stats.last_tx_gstate = 0u;
+    uart2_protocol_test_stats.last_tx_rxstate = 0u;
     uart2_protocol_test_stats.last_frame_tick_ms = 0u;
     uart2_protocol_test_stats.min_frame_gap_ms = 0xFFFFFFFFu;
     uart2_protocol_test_stats.max_frame_gap_ms = 0u;
+    uart2_protocol_test_stats.last_tx_error_code = 0u;
+    uart2_protocol_test_stats.last_tx_uart_isr = 0u;
+    uart2_protocol_test_stats.last_tx_uart_cr1 = 0u;
+    uart2_protocol_test_stats.last_tx_uart_cr3 = 0u;
     __enable_irq();
 }
 
@@ -572,10 +653,24 @@ extern "C" void UartProtocolTest_FillActuatorCommand(
     float *out_efforts,
     uint32_t effort_count)
 {
+    float target_efforts[kJointCount] = {0.0f};
+    uint32_t last_valid_command_tick_ms = 0u;
+    uint8_t command_enable = 0u;
+    uint8_t command_estop = 0u;
+
+    __disable_irq();
+    for (uint8_t i = 0u; i < kJointCount; ++i) {
+        target_efforts[i] = g_target_efforts[i];
+    }
+    last_valid_command_tick_ms = g_last_valid_command_tick_ms;
+    command_enable = g_command_enable;
+    command_estop = g_command_estop;
+    __enable_irq();
+
     const uint32_t now = HAL_GetTick();
     const bool timed_out =
-        (g_last_valid_command_tick_ms == 0u) ||
-        ((now - g_last_valid_command_tick_ms) > kCommandTimeoutMs);
+        (last_valid_command_tick_ms == 0u) ||
+        ((now - last_valid_command_tick_ms) > kCommandTimeoutMs);
 
     if (timed_out) {
         g_last_command_timeout = 1u;
@@ -583,11 +678,11 @@ extern "C" void UartProtocolTest_FillActuatorCommand(
 
     uint8_t online_mask = BuildOnlineMask();
     const bool any_motor_offline = (online_mask != 0x3Fu);
-    if (g_command_estop != 0u) {
+    if (command_estop != 0u) {
         g_safety_state = kSafetyStateEstop;
     } else if (timed_out) {
         g_safety_state = kSafetyStateTimeout;
-    } else if (g_command_enable == 0u) {
+    } else if (command_enable == 0u) {
         g_safety_state = kSafetyStateDisabled;
     } else if (any_motor_offline) {
         g_safety_state = kSafetyStateFault;
@@ -598,7 +693,7 @@ extern "C" void UartProtocolTest_FillActuatorCommand(
     for (uint8_t i = 0u; i < kJointCount; ++i) {
         float target = 0.0f;
         if (g_safety_state == kSafetyStateEnabled) {
-            target = g_target_efforts[i];
+            target = target_efforts[i];
         }
 
         const float effort_limit = (i == 2u || i == 5u) ?
