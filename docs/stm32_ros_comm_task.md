@@ -576,3 +576,59 @@ STM32 侧本轮已完成的代码改动：
 - 压测链路：`[v] 已打通`
 - 正式 V1 代码：`[x] 已实现`
 - 正式 V1 硬件闭环：`[~] 待联调验证`
+
+### 12.4 2026-06-25 正式状态帧发送失败问题定位
+
+本轮未做代码修改，只记录基于最新抓包和 STM32 调试打印得到的问题定位结论。
+
+现象一：ROS 侧 `/stm32_bridge/counters` 表现异常
+
+- 计数样例：`[0, 14576, 0, 1092082, 0, 0, 0]`
+- 对应含义：
+  - `rx_frames_ok = 0`
+  - `rx_crc_errors` 持续增长
+  - `rx_length_errors = 0`
+  - `rx_sync_losses` 很大
+  - `tx_frames_sent = 0`
+- 这说明 ROS 侧没有成功解出任何一帧合法状态帧，但当时还不能仅凭这一点判断根因在 ROS 解包侧。
+
+现象二：树莓派直接抓取 `/dev/ttyAMA4` 原始上行字节
+
+- 在停掉 `hw.launch.py` 后，直接读取 `/dev/ttyAMA4` 的 256 字节原始流。
+- 字节流中频繁出现 `a5 5a 81 80`，表面上看像是正式 `type=0x81` 状态帧。
+- 但按当前源码约定的 `payload_len=128`、`CRC(type,len,seq,payload)` 去校验时，原始流无法通过 CRC。
+- 同时，连续帧头实际出现的间距约为 `75` 到 `77` 字节，而不是新协议应有的完整帧长度。
+- 因此，ROS 侧看到的是“看起来像新帧头”的字节流，但内容与当前正式协议定义并不一致。
+
+现象三：STM32 调试打印直接显示 `USART2` 上行发送失败
+
+调试打印样例：
+
+```text
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=595 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=694 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=793 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=892 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=991 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=1090 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=1189 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=1288 last_rx=0 last_tx=0
+uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=0 tx_err=1387 last_rx=0 last_tx=0
+```
+
+这组打印可以直接说明：
+
+- `tx=0`：STM32 `USART2` 正式状态帧一帧都没有成功发出。
+- `tx_err` 持续增长：发送阶段持续失败，失败点发生在 ROS 侧解包之前。
+- `rx_ok=0`、`last_rx=0`：本轮同时也没有收到 ROS 下行的合法命令帧。
+
+本轮结论：
+
+- 这一次问题的根因不是 ROS 侧解包逻辑。
+- 根因已经前移到 STM32 侧更前面的发送链路：`USART2` 正式状态帧发送本身持续失败。
+- ROS 侧观察到的 CRC 错误和同步丢失，更应视为下游症状，而不是主因。
+
+当前记录状态：
+
+- 仅完成问题定位与证据记录。
+- 本节不包含任何代码修改。
