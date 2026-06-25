@@ -520,24 +520,11 @@ void TrySendStatusFrame()
     g_tx_in_flight_seq = g_tx_seq;
     const HAL_StatusTypeDef tx_status =
         HAL_UART_Transmit_DMA(&huart2, g_status_frame, frame_len);
-    uart2_protocol_test_stats.last_tx_uart_isr = huart2.Instance->ISR;
-    uart2_protocol_test_stats.last_tx_uart_cr1 = huart2.Instance->CR1;
-    uart2_protocol_test_stats.last_tx_uart_cr3 = huart2.Instance->CR3;
 
     if (tx_status == HAL_OK) {
-        uart2_protocol_test_stats.last_tx_hal_status =
-            static_cast<uint8_t>(HAL_OK);
-        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(&huart2);
-        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart2.gState);
-        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart2.RxState);
     } else {
         g_tx_in_flight = 0u;
         uart2_protocol_test_stats.tx_errors++;
-        uart2_protocol_test_stats.last_tx_hal_status =
-            static_cast<uint8_t>(tx_status);
-        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(&huart2);
-        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart2.gState);
-        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart2.RxState);
         if (tx_status == HAL_BUSY) {
             uart2_protocol_test_stats.tx_busy_errors++;
         } else if (tx_status == HAL_TIMEOUT) {
@@ -596,21 +583,13 @@ extern "C" void UartProtocolTest_GetStats(UartProtocolTestStats *out)
     out->tx_busy_errors = uart2_protocol_test_stats.tx_busy_errors;
     out->tx_timeout_errors = uart2_protocol_test_stats.tx_timeout_errors;
     out->tx_hal_error_errors = uart2_protocol_test_stats.tx_hal_error_errors;
-    out->tx_abort_rx_count = uart2_protocol_test_stats.tx_abort_rx_count;
     out->last_seq = uart2_protocol_test_stats.last_seq;
     out->last_tx_seq = uart2_protocol_test_stats.last_tx_seq;
     out->last_type = uart2_protocol_test_stats.last_type;
     out->last_len = uart2_protocol_test_stats.last_len;
-    out->last_tx_hal_status = uart2_protocol_test_stats.last_tx_hal_status;
-    out->last_tx_gstate = uart2_protocol_test_stats.last_tx_gstate;
-    out->last_tx_rxstate = uart2_protocol_test_stats.last_tx_rxstate;
     out->last_frame_tick_ms = uart2_protocol_test_stats.last_frame_tick_ms;
     out->min_frame_gap_ms = uart2_protocol_test_stats.min_frame_gap_ms;
     out->max_frame_gap_ms = uart2_protocol_test_stats.max_frame_gap_ms;
-    out->last_tx_error_code = uart2_protocol_test_stats.last_tx_error_code;
-    out->last_tx_uart_isr = uart2_protocol_test_stats.last_tx_uart_isr;
-    out->last_tx_uart_cr1 = uart2_protocol_test_stats.last_tx_uart_cr1;
-    out->last_tx_uart_cr3 = uart2_protocol_test_stats.last_tx_uart_cr3;
     out->tx_skip_in_flight = uart2_protocol_test_stats.tx_skip_in_flight;
     __enable_irq();
 }
@@ -631,21 +610,13 @@ extern "C" void UartProtocolTest_ResetStats(void)
     uart2_protocol_test_stats.tx_busy_errors = 0u;
     uart2_protocol_test_stats.tx_timeout_errors = 0u;
     uart2_protocol_test_stats.tx_hal_error_errors = 0u;
-    uart2_protocol_test_stats.tx_abort_rx_count = 0u;
     uart2_protocol_test_stats.last_seq = 0u;
     uart2_protocol_test_stats.last_tx_seq = 0u;
     uart2_protocol_test_stats.last_type = 0u;
     uart2_protocol_test_stats.last_len = 0u;
-    uart2_protocol_test_stats.last_tx_hal_status = 0u;
-    uart2_protocol_test_stats.last_tx_gstate = 0u;
-    uart2_protocol_test_stats.last_tx_rxstate = 0u;
     uart2_protocol_test_stats.last_frame_tick_ms = 0u;
     uart2_protocol_test_stats.min_frame_gap_ms = 0xFFFFFFFFu;
     uart2_protocol_test_stats.max_frame_gap_ms = 0u;
-    uart2_protocol_test_stats.last_tx_error_code = 0u;
-    uart2_protocol_test_stats.last_tx_uart_isr = 0u;
-    uart2_protocol_test_stats.last_tx_uart_cr1 = 0u;
-    uart2_protocol_test_stats.last_tx_uart_cr3 = 0u;
     uart2_protocol_test_stats.tx_skip_in_flight = 0u;
     __enable_irq();
 }
@@ -731,13 +702,6 @@ extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
         uart2_protocol_test_stats.tx_frames++;
         uart2_protocol_test_stats.tx_bytes += g_tx_frame_len;
         uart2_protocol_test_stats.last_tx_seq = g_tx_in_flight_seq;
-        uart2_protocol_test_stats.last_tx_hal_status = static_cast<uint8_t>(HAL_OK);
-        uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(huart);
-        uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart->gState);
-        uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart->RxState);
-        uart2_protocol_test_stats.last_tx_uart_isr = huart->Instance->ISR;
-        uart2_protocol_test_stats.last_tx_uart_cr1 = huart->Instance->CR1;
-        uart2_protocol_test_stats.last_tx_uart_cr3 = huart->Instance->CR3;
         g_tx_seq = static_cast<uint16_t>(g_tx_in_flight_seq + 1u);
     }
 }
@@ -749,14 +713,6 @@ extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
             g_tx_in_flight = 0u;
             uart2_protocol_test_stats.tx_errors++;
             uart2_protocol_test_stats.tx_hal_error_errors++;
-            uart2_protocol_test_stats.last_tx_hal_status =
-                static_cast<uint8_t>(HAL_ERROR);
-            uart2_protocol_test_stats.last_tx_error_code = HAL_UART_GetError(huart);
-            uart2_protocol_test_stats.last_tx_gstate = static_cast<uint8_t>(huart->gState);
-            uart2_protocol_test_stats.last_tx_rxstate = static_cast<uint8_t>(huart->RxState);
-            uart2_protocol_test_stats.last_tx_uart_isr = huart->Instance->ISR;
-            uart2_protocol_test_stats.last_tx_uart_cr1 = huart->Instance->CR1;
-            uart2_protocol_test_stats.last_tx_uart_cr3 = huart->Instance->CR3;
         }
         uart2_protocol_test_stats.uart_errors++;
         __HAL_UART_CLEAR_OREFLAG(huart);

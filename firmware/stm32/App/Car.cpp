@@ -244,39 +244,23 @@ void Debug_Task(void* pv)
         const TickType_t now = xTaskGetTickCount();
         if ((now - last_report_tick) >= pdMS_TO_TICKS(1000))
         {
-            DMA_Stream_TypeDef *const usart2_tx_dma =
-                (DMA_Stream_TypeDef *)hdma_usart2_tx.Instance;
             last_report_tick = now;
             UartProtocolTest_GetStats(&stats);
-            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu tx=%lu tx_err=%lu busy=%lu to=%lu herr=%lu abort_rx=%lu tx_st=%u tx_ec=%lu g=%u rxs=%u isr=%08lx cr1=%08lx cr3=%08lx last_rx=%u last_tx=%u dma_st=%u ndtr=%lu dcr=%08lx dfcr=%08lx lisr=%08lx hisr=%08lx mux=%08lx hdmatx=%08lx parent=%08lx skip=%lu\r\n",
+            printf("uart2 rx_ok=%lu rx_crc=%lu rx_gap=%lu uart_err=%lu tx=%lu tx_err=%lu busy=%lu to=%lu herr=%lu tx_skip=%lu last_rx=%u last_tx=%u gap_ms=[%lu,%lu]\r\n",
                    (unsigned long)stats.frames_ok,
                    (unsigned long)stats.crc_errors,
                    (unsigned long)stats.rx_seq_gaps,
+                   (unsigned long)stats.uart_errors,
                    (unsigned long)stats.tx_frames,
                    (unsigned long)stats.tx_errors,
                    (unsigned long)stats.tx_busy_errors,
                    (unsigned long)stats.tx_timeout_errors,
                    (unsigned long)stats.tx_hal_error_errors,
-                   (unsigned long)stats.tx_abort_rx_count,
-                   (unsigned int)stats.last_tx_hal_status,
-                   (unsigned long)stats.last_tx_error_code,
-                   (unsigned int)stats.last_tx_gstate,
-                   (unsigned int)stats.last_tx_rxstate,
-                   (unsigned long)stats.last_tx_uart_isr,
-                   (unsigned long)stats.last_tx_uart_cr1,
-                   (unsigned long)stats.last_tx_uart_cr3,
+                   (unsigned long)stats.tx_skip_in_flight,
                    (unsigned int)stats.last_seq,
                    (unsigned int)stats.last_tx_seq,
-                   (unsigned int)hdma_usart2_tx.State,
-                   (unsigned long)usart2_tx_dma->NDTR,
-                   (unsigned long)usart2_tx_dma->CR,
-                   (unsigned long)usart2_tx_dma->FCR,
-                   (unsigned long)DMA1->LISR,
-                   (unsigned long)DMA1->HISR,
-                   (unsigned long)DMAMUX1_Channel1->CCR,
-                   (unsigned long)huart2.hdmatx,
-                   (unsigned long)hdma_usart2_tx.Parent,
-                   (unsigned long)stats.tx_skip_in_flight);
+                   (unsigned long)stats.min_frame_gap_ms,
+                   (unsigned long)stats.max_frame_gap_ms);
         }
 
         if(debugflag == 1)

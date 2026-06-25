@@ -31,32 +31,3 @@ void JY901S_ReadSnapshot(JY901SSnapshot *snapshot)
     snapshot->pitch = (float)ReadI16Le(raw, 20u) * kAngleScale;
     snapshot->yaw = (float)ReadI16Le(raw, 22u) * kAngleScale;
 }
-
-void JY901S_Acc(volatile float* accx, volatile float* accy, volatile float* accz)
-{
-    JY901SSnapshot snapshot = {0};
-    JY901S_ReadSnapshot(&snapshot);
-    *accx = snapshot.accx;
-    *accy = snapshot.accy;
-    *accz = snapshot.accz;
-}
-
-void JY901S_Gyro(volatile float* gyx, volatile float* gyy, volatile float* gyz, volatile float* yaw)
-{
-    JY901SSnapshot snapshot = {0};
-    JY901S_ReadSnapshot(&snapshot);
-    *gyx = snapshot.gyx;
-    *gyy = snapshot.gyy;
-    *gyz = snapshot.gyz;
-    *yaw += *gyz * 0.005f;
-}
-//*1.2414
-
-void JY901S_Angle(volatile float* roll, volatile float* pitch)
-{
-    JY901SSnapshot snapshot = {0};
-    JY901S_ReadSnapshot(&snapshot);
-    *roll = snapshot.roll;
-    *pitch = snapshot.pitch;
-}
-

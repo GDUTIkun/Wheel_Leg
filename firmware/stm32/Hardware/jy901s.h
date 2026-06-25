@@ -22,9 +22,6 @@ typedef struct
 } JY901SSnapshot;
 
 void JY901S_ReadSnapshot(JY901SSnapshot *snapshot);
-void JY901S_Acc(volatile float* accx, volatile float* accy, volatile float* accz);
-void JY901S_Gyro(volatile float* gyx, volatile float* gyy, volatile float* gyz, volatile float* yaw);
-void JY901S_Angle(volatile float* roll, volatile float* pitch);
 
 #ifdef __cplusplus
 }
