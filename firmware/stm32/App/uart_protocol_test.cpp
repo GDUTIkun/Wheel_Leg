@@ -87,6 +87,7 @@ uint16_t g_tx_seq = 0u;
 uint32_t g_last_status_tick_ms = 0u;
 uint8_t g_payload[kMaxPayloadLen] = {0};
 uint8_t g_status_frame[2 + 4 + sizeof(StatePayload) + 2] = {0};
+StatePayload g_state_payload = {};
 float g_target_efforts[kJointCount] = {0.0f};
 float g_applied_efforts[kJointCount] = {0.0f};
 uint8_t g_command_enable = 0u;
@@ -466,8 +467,7 @@ void TrySendStatusFrame()
     }
     g_last_status_tick_ms = now;
 
-    StatePayload payload = {};
-    FillStatePayload(&payload, now);
+    FillStatePayload(&g_state_payload, now);
 
     const uint8_t payload_len = static_cast<uint8_t>(sizeof(StatePayload));
     g_status_frame[0] = kFrameHead0;
@@ -475,7 +475,7 @@ void TrySendStatusFrame()
     g_status_frame[2] = kFrameTypeState;
     g_status_frame[3] = payload_len;
     WriteU16Le(g_status_frame + 4, g_tx_seq);
-    EncodeStatePayload(payload, g_status_frame + 6);
+    EncodeStatePayload(g_state_payload, g_status_frame + 6);
 
     const uint16_t crc =
         Crc16Ccitt(g_status_frame + 2, static_cast<uint16_t>(4u + payload_len));

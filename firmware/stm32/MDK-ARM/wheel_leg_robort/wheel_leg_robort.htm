@@ -3,7 +3,7 @@
 <title>Static Call Graph - [wheel_leg_robort\wheel_leg_robort.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image wheel_leg_robort\wheel_leg_robort.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Thu Jun 25 19:58:02 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Thu Jun 25 20:21:55 2026
 <BR><P>
 <H3>Maximum Stack Usage =        384 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -849,10 +849,9 @@ Global Symbols
 <LI><a href="#[13f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_GPIO_Init
 <LI><a href="#[16f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SystemClock_Config()
 <LI><a href="#[17a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskCreate
-<LI><a href="#[15a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()
+<LI><a href="#[12a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_MspInit
 <LI><a href="#[a7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Motor_Control_Task(void*)
 <LI><a href="#[aa]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Debug_Task(void*)
-<LI><a href="#[12a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_MspInit
 </UL>
 
 <P><STRONG><a name="[1e1]"></a>__aeabi_memclr8</STRONG> (Thumb, 0 bytes, Stack size 4 bytes, rt_memclr_w.o(.text), UNUSED)
@@ -1601,8 +1600,8 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[133]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Called By]<UL><LI><a href="#[15a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()
-<LI><a href="#[9e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;fputc
+<BR>[Called By]<UL><LI><a href="#[9e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;fputc
+<LI><a href="#[15a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()
 </UL>
 
 <P><STRONG><a name="[14e]"></a>HAL_UART_TxCpltCallback</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32h7xx_hal_uart.o(i.HAL_UART_TxCpltCallback))
@@ -1954,7 +1953,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[159]"></a>UartProtocolTest_Process</STRONG> (Thumb, 8 bytes, Stack size 8 bytes, uart_protocol_test.o(i.UartProtocolTest_Process))
-<BR><BR>[Stack]<UL><LI>Max Depth = 224<LI>Call Chain = UartProtocolTest_Process &rArr; &lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame() &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<BR><BR>[Stack]<UL><LI>Max Depth = 96<LI>Call Chain = UartProtocolTest_Process &rArr; &lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame() &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[15a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()
 </UL>
@@ -1969,8 +1968,8 @@ Global Symbols
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32h743xx.o(RESET)
 </UL>
 <P><STRONG><a name="[aa]"></a>Debug_Task(void*)</STRONG> (Thumb, 100 bytes, Stack size 80 bytes, car.o(i._Z10Debug_TaskPv))
-<BR><BR>[Stack]<UL><LI>Max Depth = 304 + Unknown Stack Size
-<LI>Call Chain = Debug_Task(void*) &rArr; UartProtocolTest_Process &rArr; &lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame() &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<BR><BR>[Stack]<UL><LI>Max Depth = 208 + Unknown Stack Size
+<LI>Call Chain = Debug_Task(void*) &rArr; __2printf &rArr; _printf_char_file &rArr; _printf_char_common &rArr; __printf
 </UL>
 <BR>[Calls]<UL><LI><a href="#[15b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskGetTickCount
 <LI><a href="#[15d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskDelay
@@ -2019,16 +2018,16 @@ Global Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 144<LI>Call Chain = Motor_Control_Task(void*) &rArr; TIM_1ms_CAN_PeriodElapsedCallback() &rArr; CAN_Transmit_Data(FDCAN_HandleTypeDef*, unsigned short, unsigned char*, unsigned short) &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[15d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskDelay
+<LI><a href="#[16d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Normalize_Deg_Signed(float)
+<LI><a href="#[165]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM_1ms_CAN_PeriodElapsedCallback()
+<LI><a href="#[16a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::TIM_Calculate_PeriodElapsedCallback()
+<LI><a href="#[169]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_C620::TIM_Calculate_PeriodElapsedCallback()
 <LI><a href="#[16c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Basic_Math_Rad_To_Deg(float)
 <LI><a href="#[152]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UartProtocolTest_FillActuatorCommand
 <LI><a href="#[16e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::Get_Now_Omega() const
 <LI><a href="#[16b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::Get_Now_Angle() const
 <LI><a href="#[167]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::Set_Target_Torque(const float&)
 <LI><a href="#[168]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_C620::Set_Target_Torque(const float&)
-<LI><a href="#[16d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Normalize_Deg_Signed(float)
-<LI><a href="#[165]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;TIM_1ms_CAN_PeriodElapsedCallback()
-<LI><a href="#[16a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::TIM_Calculate_PeriodElapsedCallback()
-<LI><a href="#[169]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_C620::TIM_Calculate_PeriodElapsedCallback()
 <LI><a href="#[f0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> car.o(i._Z9Car_StartPv)
@@ -2097,10 +2096,10 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[17a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskCreate
 <LI><a href="#[17b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskStartScheduler
-<LI><a href="#[156]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UartProtocolTest_Init
 <LI><a href="#[176]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;CAN_Init(FDCAN_HandleTypeDef*, void(*)(FDCAN_RxHeaderTypeDef&, unsigned char*))
 <LI><a href="#[179]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_GIM6010::Init(const FDCAN_HandleTypeDef*, const Enum_Motor_DJI_ID&, const float&)
 <LI><a href="#[178]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Class_Motor_DJI_C620::Init(const FDCAN_HandleTypeDef*, const Enum_Motor_DJI_ID&)
+<LI><a href="#[156]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UartProtocolTest_Init
 </UL>
 <BR>[Called By]<UL><LI><a href="#[bd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
@@ -2881,8 +2880,8 @@ Local Symbols
 <BR>[Called By]<UL><LI><a href="#[15a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()
 </UL>
 
-<P><STRONG><a name="[15a]"></a>&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()</STRONG> (Thumb, 180 bytes, Stack size 152 bytes, uart_protocol_test.o(i._ZN46_GLOBAL__N__22_uart_protocol_test_cpp_cc01652918TrySendStatusFrameEv))
-<BR><BR>[Stack]<UL><LI>Max Depth = 216<LI>Call Chain = &lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame() &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<P><STRONG><a name="[15a]"></a>&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame()</STRONG> (Thumb, 168 bytes, Stack size 24 bytes, uart_protocol_test.o(i._ZN46_GLOBAL__N__22_uart_protocol_test_cpp_cc01652918TrySendStatusFrameEv))
+<BR><BR>[Stack]<UL><LI>Max Depth = 88<LI>Call Chain = &lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::TrySendStatusFrame() &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 <LI><a href="#[132]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_Transmit
@@ -2890,7 +2889,6 @@ Local Symbols
 <LI><a href="#[193]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::FillStatePayload(&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::StatePayload*, unsigned)
 <LI><a href="#[199]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::WriteU16Le(unsigned char*, unsigned short)
 <LI><a href="#[18b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;&lang;unnamed namespace _22_uart_protocol_test_cpp_cc016529&rang;::Crc16Ccitt(const unsigned char*, unsigned short)
-<LI><a href="#[f0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
 </UL>
 <BR>[Called By]<UL><LI><a href="#[159]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UartProtocolTest_Process
 </UL>

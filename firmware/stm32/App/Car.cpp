@@ -27,7 +27,7 @@ void Motor_Check_Task(void* pv);
 TaskHandle_t control_task_handle;
 void Control_Task(void* pv);
 
-#define DEBUG_TASK_STACK                 128
+#define DEBUG_TASK_STACK                 256
 #define DEBUG_TASK_STACK_PRIORITY        2
 TaskHandle_t debug_task_handle;
 void Debug_Task(void* pv);
