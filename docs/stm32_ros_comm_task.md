@@ -223,6 +223,11 @@ u32 last_rx_age_ms
 - 编码：所有多字节字段当前都按 little-endian 打包
 - 上位机模拟发送工具：`tools/uart_frame_sender.py`
 - ROS 侧压测节点：`ros2_ws/src/wheel_leg_stm32_bridge/src/stm32_uart_stress_node.cpp`
+- ROS 侧压测节点当前同时支持发压测帧和收 STM32 回传状态帧，发布：
+  - `/stm32_bridge/uart_stress/status_text`
+  - `/stm32_bridge/uart_stress/tx_counters`
+  - `/stm32_bridge/uart_stress/rx_counters`
+  - `/stm32_bridge/uart_stress/stm32_status`
 
 ## 9. 验收场景
 
