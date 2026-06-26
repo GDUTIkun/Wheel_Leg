@@ -7,6 +7,7 @@
 - `progress.md`：当前阶段进度与待确认问题。
 - `stm32_hardware_integration.md`：STM32 硬件接入与 100Hz 实机闭环准备。
 - `stm32_ros_comm_task.md`：STM32 与 ROS 第一版通信内容、字段和验收任务。
+- `control_stm_migration_plan.md`：控制层接入 STM 的分层、阶段开关、测试顺序和进度表。
 - `100hz_balance_notes.md`：500Hz 调整到 100Hz 后的仿真平衡记录，作为上硬件前参考基线。
 - `leg_angle_mapping.md`：腿部 GIM6010 电机角度到机构角/世界水平角的标定映射。
 

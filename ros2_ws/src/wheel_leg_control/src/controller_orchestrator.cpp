@@ -65,8 +65,17 @@ void ControllerOrchestrator::SetTurnHipFeedforwardScale(double scale) {
   runtime_.set_turn_hip_feedforward_scale(scale);
 }
 
+void ControllerOrchestrator::SetStageConfig(
+    const StandControlStageConfig& config) {
+  runtime_.set_stage_config(config);
+}
+
 const ControlTargets& ControllerOrchestrator::targets() const {
   return runtime_.targets();
+}
+
+const StandControlStageConfig& ControllerOrchestrator::stage_config() const {
+  return runtime_.stage_config();
 }
 
 void ControllerOrchestrator::ResetControllersForState(

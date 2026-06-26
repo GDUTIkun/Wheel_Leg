@@ -35,6 +35,7 @@ ControlStepOutputs StandControlRuntime::Step(
       targets_,
       control_state,
       turn_hip_feedforward_scale_,
+      stage_config_,
       algorithms_);
 }
 

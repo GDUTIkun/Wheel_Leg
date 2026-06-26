@@ -37,10 +37,17 @@ class StandControlRuntime {
   void set_turn_hip_feedforward_scale(double scale) {
     turn_hip_feedforward_scale_ = scale;
   }
+  const StandControlStageConfig& stage_config() const {
+    return stage_config_;
+  }
+  void set_stage_config(const StandControlStageConfig& config) {
+    stage_config_ = config;
+  }
 
  private:
   ControlTargets targets_;
   double turn_hip_feedforward_scale_ = DefaultTurnHipFeedforwardScale();
+  StandControlStageConfig stage_config_;
   FunctionalPidAdapter leglen_pid_l_;
   FunctionalPidAdapter leglen_pid_r_;
   FunctionalPidAdapter steer_v_pid_;

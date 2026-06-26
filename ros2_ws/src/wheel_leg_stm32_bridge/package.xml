@@ -17,6 +17,8 @@
   <depend>wheel_leg_hw</depend>
   <depend>wheel_leg_msgs</depend>
 
+  <test_depend>ament_cmake_gtest</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

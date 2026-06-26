@@ -4,7 +4,7 @@
 
 - 迭代编号：`iter-005`
 - 迭代名称：STM32 硬件接入与 100Hz 实机闭环准备
-- 当前任务文档：`stm32_hardware_integration.md` / `stm32_ros_comm_task.md`
+- 当前任务文档：`stm32_hardware_integration.md` / `stm32_ros_comm_task.md` / `control_stm_migration_plan.md`
 - 100Hz 仿真基线：`100hz_balance_notes.md`
 
 ## 2. 状态说明
@@ -54,6 +54,7 @@
 | 腿部角度映射 | `leg_angle_mapping.md` | `[v] 速度已验证` | 已按现场观测修正左右髋和左右膝世界角；四个关节角速度极性已实机确认，knee 角速度已正确叠加 hip 角速度 |
 | STM32 硬件接入任务 | `stm32_hardware_integration.md` | `[~] 进行中` | 下一阶段主线，先打通通信、状态上报、命令下发、安全停机和方向/单位校验 |
 | STM32 与 ROS 通信内容 | `stm32_ros_comm_task.md` | `[~] 首轮联调已完成，V1 代码已落地` | 第一版固定为串口通信，ROS 控制闭环 100Hz，STM 状态上报优先测试 200Hz；`2026-06-25` 已完成 UART4 <-> USART2 首轮双向联调并记录共地问题，同日已完成正式 bridge / 正式协议 / RC ch7 急停的第一版代码接线 |
+| 控制层接入 STM 分阶段迁移 | `control_stm_migration_plan.md` | `[x] 代码已完成，[!] 待实机验证` | 已加入控制阶段开关、仿真/硬件两套参数、硬件状态 assembler 和自动测试；后续按传感器、VMC、LQR、落地稳定性、航向+抗劈叉、roll 补偿逐段验证 |
 | 工程结构与接口约束 | `architecture.md` / `protocol.md` | `[~] 持续维护` | 保留为当前文档入口，不再维护旧 `docs/doc/` 规划体系 |
 
 ## 5. 推荐执行顺序
@@ -63,9 +64,11 @@
 3. `[x]` 将 500Hz 控制频率下调到 100Hz，并在仿真中恢复站立稳定。
 4. `[x]` 冻结 100Hz 仿真阶段，等待硬件接入后再调最终参数。
 5. `[~]` 进入 STM32 硬件接入任务，先按 `stm32_ros_comm_task.md` 固定通信内容，再验证通信、状态、命令和安全链路。
-6. `[ ]` 悬空验证电机、编码器和 IMU 的方向、单位、零位。
-7. `[ ]` 轻触地验证支撑力方向、限幅和 100Hz 周期。
-8. `[ ]` 进入低风险实机站立闭环调参。
+6. `[x]` 为控制层接入 STM 建立阶段开关、仿真/硬件参数入口和硬件状态装配模块。
+7. `[ ]` 按 `control_stm_migration_plan.md` 完成传感器阶段验证。
+8. `[ ]` 按 `control_stm_migration_plan.md` 完成 VMC 阶段验证。
+9. `[ ]` 按 `control_stm_migration_plan.md` 完成 LQR 与落地稳定性验证。
+10. `[ ]` 按 `control_stm_migration_plan.md` 完成航向+抗劈叉与 roll 补偿验证。
 
 ## 6. 当前输入与已完成基础
 
@@ -80,6 +83,7 @@
 - 当前参数不视为实机最终参数，后续以 STM32 接入后的真实 IMU、编码器、电机响应和通信延迟重新调参。
 - 当前 STM32 与 ROS 第一版通信边界已记录：使用串口通信，两侧手动解包；ROS 以 100Hz 做控制计算，STM 可用更高频率上传原始/近原始硬件数据，优先测试 200Hz 状态上报，STM 执行六电机力矩指令。
 - 当前正式通信节点 V1 代码已接入仓库：ROS 侧 bridge 不再是占位节点，`RcStatus` 已新增 `estop_active`，默认 `RC channel 7` 低值端为急停，并由 bridge 直接门控下行 `enable/estop` 命令帧。
+- 当前控制层接入 STM 的第一版代码已接入仓库：`wheel_leg_controller` 支持阶段开关，`hw.launch.py` 默认加载硬件保守参数，`sim.launch.py` 默认加载仿真全功能参数，硬件状态装配已从 bridge 节点拆出并加单元测试。
 
 ## 7. 当前阻塞或待确认问题
 

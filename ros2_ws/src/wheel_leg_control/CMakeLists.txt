@@ -9,6 +9,9 @@ find_package(std_msgs REQUIRED)
 find_package(wheel_leg_bridge REQUIRED)
 find_package(wheel_leg_common REQUIRED)
 find_package(wheel_leg_msgs REQUIRED)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+endif()
 
 add_library(${PROJECT_NAME}
   src/controller_orchestrator.cpp
@@ -67,4 +70,15 @@ ament_export_dependencies(
   wheel_leg_msgs
 )
 ament_export_include_directories(include)
+
+if(BUILD_TESTING)
+  ament_add_gtest(test_stand_control_pipeline
+    test/test_stand_control_pipeline.cpp
+  )
+  target_link_libraries(test_stand_control_pipeline ${PROJECT_NAME})
+  ament_target_dependencies(test_stand_control_pipeline
+    wheel_leg_common
+  )
+endif()
+
 ament_package()

@@ -70,22 +70,31 @@ ControlStepOutputs RunStandControlStep(
     const ControlTargets& targets,
     const StandControlState& control_state,
     double turn_hip_feedforward_scale,
+    const StandControlStageConfig& stage_config,
     const ControlAlgorithmSet& algorithms) {
   ControlStepOutputs outputs;
   const auto& right_leg = control_state.right_leg;
   const auto& left_leg = control_state.left_leg;
 
-  const double u_leg_length_r = algorithms.leglen_pid_r->Compute(
-      {.measurement = right_leg.leg_length,
-       .target = targets.target_leg_length,
-       .dt = dt});
-  const double u_leg_length_l = algorithms.leglen_pid_l->Compute(
-      {.measurement = left_leg.leg_length,
-       .target = targets.target_leg_length,
-       .dt = dt});
+  const double u_leg_length_r =
+      stage_config.enable_leg_length_pid
+          ? algorithms.leglen_pid_r->Compute(
+                {.measurement = right_leg.leg_length,
+                 .target = targets.target_leg_length,
+                 .dt = dt})
+          : 0.0;
+  const double u_leg_length_l =
+      stage_config.enable_leg_length_pid
+          ? algorithms.leglen_pid_l->Compute(
+                {.measurement = left_leg.leg_length,
+                 .target = targets.target_leg_length,
+                 .dt = dt})
+          : 0.0;
   const double leg_length_gravity_compensation =
-      kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
-      std::cos(control_state.body.roll);
+      stage_config.enable_leg_length_pid
+          ? kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
+                std::cos(control_state.body.roll)
+          : 0.0;
   outputs.right_leg_length_force =
       u_leg_length_r + leg_length_gravity_compensation;
   outputs.left_leg_length_force =
@@ -93,26 +102,45 @@ ControlStepOutputs RunStandControlStep(
 
   const LqrStateVector lqr_target = BuildLqrTarget(targets);
   const LqrControlOutput left_lqr_output =
-      algorithms.lqr_algorithm->Compute(
-          {.leg_length = left_leg.leg_length,
-           .target = lqr_target,
-           .state = BuildLqrStates(left_leg, control_state.body)});
+      stage_config.enable_lqr
+          ? algorithms.lqr_algorithm->Compute(
+                {.leg_length = left_leg.leg_length,
+                 .target = lqr_target,
+                 .state = BuildLqrStates(left_leg, control_state.body)})
+          : LqrControlOutput{};
   const LqrControlOutput right_lqr_output =
-      algorithms.lqr_algorithm->Compute(
-          {.leg_length = right_leg.leg_length,
-           .target = lqr_target,
-           .state = BuildLqrStates(right_leg, control_state.body)});
+      stage_config.enable_lqr
+          ? algorithms.lqr_algorithm->Compute(
+                {.leg_length = right_leg.leg_length,
+                 .target = lqr_target,
+                 .state = BuildLqrStates(right_leg, control_state.body)})
+          : LqrControlOutput{};
 
-  outputs.steer_output = algorithms.steer_v_pid->Compute(
-      {.measurement = control_state.body.yaw_rate,
-       .target = targets.target_yaw_rate,
-       .dt = dt});
+  outputs.steer_output =
+      stage_config.enable_heading_control
+          ? algorithms.steer_v_pid->Compute(
+                {.measurement = control_state.body.yaw_rate,
+                 .target = targets.target_yaw_rate,
+                 .dt = dt})
+          : 0.0;
   outputs.swerving_speed_ff =
-      turn_hip_feedforward_scale * outputs.steer_output;
-  outputs.anti_crash_output = algorithms.anti_crash_pid->Compute(
-      {.measurement = left_leg.phi - right_leg.phi, .target = 0.0, .dt = dt});
-  outputs.roll_balance_output = algorithms.roll_balance_pid->Compute(
-      {.measurement = control_state.body.roll, .target = 0.0, .dt = dt});
+      stage_config.enable_heading_control
+          ? turn_hip_feedforward_scale * outputs.steer_output
+          : 0.0;
+  outputs.anti_crash_output =
+      stage_config.enable_anti_split
+          ? algorithms.anti_crash_pid->Compute(
+                {.measurement = left_leg.phi - right_leg.phi,
+                 .target = 0.0,
+                 .dt = dt})
+          : 0.0;
+  outputs.roll_balance_output =
+      stage_config.enable_roll_compensation
+          ? algorithms.roll_balance_pid->Compute(
+                {.measurement = control_state.body.roll,
+                 .target = 0.0,
+                 .dt = dt})
+          : 0.0;
   const double anti_crash_hip_torque =
       -outputs.anti_crash_output + outputs.swerving_speed_ff;
   outputs.left_lqr_hip_torque =
@@ -123,30 +151,50 @@ ControlStepOutputs RunStandControlStep(
       outputs.roll_balance_output;
 
   const VmcJointTorques right_leg_command =
-      algorithms.vmc_algorithm->Compute(
-          {.force = -outputs.right_leg_length_force,
-           .torque = -outputs.right_lqr_hip_torque,
-           .leg_length = right_leg.leg_length,
-           .phi = right_leg.phi,
-           .hip_absolute = right_leg.hip_absolute,
-           .calf_absolute = right_leg.calf_absolute});
+      stage_config.enable_vmc
+          ? algorithms.vmc_algorithm->Compute(
+                {.force = -outputs.right_leg_length_force,
+                 .torque = -outputs.right_lqr_hip_torque,
+                 .leg_length = right_leg.leg_length,
+                 .phi = right_leg.phi,
+                 .hip_absolute = right_leg.hip_absolute,
+                 .calf_absolute = right_leg.calf_absolute})
+          : VmcJointTorques{};
   const VmcJointTorques left_leg_command =
-      algorithms.vmc_algorithm->Compute(
-          {.force = -outputs.left_leg_length_force,
-           .torque = -outputs.left_lqr_hip_torque,
-           .leg_length = left_leg.leg_length,
-           .phi = left_leg.phi,
-           .hip_absolute = left_leg.hip_absolute,
-           .calf_absolute = left_leg.calf_absolute});
+      stage_config.enable_vmc
+          ? algorithms.vmc_algorithm->Compute(
+                {.force = -outputs.left_leg_length_force,
+                 .torque = -outputs.left_lqr_hip_torque,
+                 .leg_length = left_leg.leg_length,
+                 .phi = left_leg.phi,
+                 .hip_absolute = left_leg.hip_absolute,
+                 .calf_absolute = left_leg.calf_absolute})
+          : VmcJointTorques{};
 
-  outputs.right_wheel_torque =
-      right_lqr_output.wheel_torque + outputs.steer_output;
-  outputs.left_wheel_torque =
-      left_lqr_output.wheel_torque - outputs.steer_output;
+  outputs.right_wheel_torque = stage_config.enable_wheel_output
+                                   ? right_lqr_output.wheel_torque +
+                                         outputs.steer_output
+                                   : 0.0;
+  outputs.left_wheel_torque = stage_config.enable_wheel_output
+                                  ? left_lqr_output.wheel_torque -
+                                        outputs.steer_output
+                                  : 0.0;
+  const VmcJointTorques gated_right_leg_command{
+      .hip_torque =
+          stage_config.enable_hip_output ? right_leg_command.hip_torque : 0.0,
+      .knee_torque =
+          stage_config.enable_knee_output ? right_leg_command.knee_torque : 0.0,
+  };
+  const VmcJointTorques gated_left_leg_command{
+      .hip_torque =
+          stage_config.enable_hip_output ? left_leg_command.hip_torque : 0.0,
+      .knee_torque =
+          stage_config.enable_knee_output ? left_leg_command.knee_torque : 0.0,
+  };
   outputs.command = BuildControlCommand(
       sim_time,
-      right_leg_command,
-      left_leg_command,
+      gated_right_leg_command,
+      gated_left_leg_command,
       outputs.right_wheel_torque,
       outputs.left_wheel_torque);
   return outputs;

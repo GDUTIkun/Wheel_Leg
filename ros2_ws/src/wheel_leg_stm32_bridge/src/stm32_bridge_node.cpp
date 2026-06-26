@@ -27,6 +27,7 @@
 
 #include "wheel_leg_bridge/message_conversions.hpp"
 #include "wheel_leg_hw/interface_contract.hpp"
+#include "wheel_leg_stm32_bridge/hardware_state_assembler.hpp"
 #include "wheel_leg_msgs/msg/joint_command.hpp"
 #include "wheel_leg_msgs/msg/rc_status.hpp"
 #include "wheel_leg_msgs/msg/stand_control_state.hpp"
@@ -50,14 +51,6 @@ constexpr std::size_t kStatePayloadSize =
 constexpr std::size_t kMaxPayloadLen = 160;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDegreesPerRadian = 180.0 / kPi;
-constexpr double kWheelRadius = 0.05;
-constexpr double kL1 = 0.18;
-constexpr double kL2 = 0.225;
-constexpr double kLeftHipOffsetDeg = 143.944;
-constexpr double kRightHipOffsetDeg = 145.56;
-constexpr double kLeftKneeOffsetDeg = 26.04;
-constexpr double kRightKneeOffsetDeg = 33.843;
-constexpr double kPhiRateLowPassAlpha = 0.95;
 // Maps ROS joint torque semantics to the motor-side polarity expected by STM32.
 constexpr std::array<float, kJointCount> kCommandEffortSigns = {
     -1.0f,
@@ -157,7 +150,7 @@ double RadiansToDegrees(double radians) {
   return radians * kDegreesPerRadian;
 }
 
-double NormalizeAngleDelta(double angle_delta) {
+double NormalizeLimitAngleDelta(double angle_delta) {
   while (angle_delta > kPi) {
     angle_delta -= 2.0 * kPi;
   }
@@ -227,61 +220,10 @@ struct ProtocolCache {
   ProtocolStateFrame state_frame;
   rclcpp::Time received_time{0, 0, RCL_ROS_TIME};
   bool have_state = false;
-  double previous_left_phi = 0.0;
-  double previous_right_phi = 0.0;
-  double filtered_left_phi_rate = 0.0;
-  double filtered_right_phi_rate = 0.0;
-  bool has_previous_left_phi = false;
-  bool has_previous_right_phi = false;
   double previous_body_time_sec = 0.0;
   bool has_previous_body_time = false;
-  double body_distance = 0.0;
+  HardwareStateAssemblyState hardware_state;
 };
-
-struct JointKinematics {
-  double hip_absolute = 0.0;
-  double calf_absolute = 0.0;
-  double leg_length = 0.0;
-  double phi = 0.0;
-  double phi_rate = 0.0;
-};
-
-JointKinematics ComputeJointKinematics(
-    double hip_joint_position,
-    double knee_joint_position,
-    double hip_offset_deg,
-    double knee_offset_deg,
-    double previous_phi,
-    double filtered_phi_rate,
-    bool has_previous_phi,
-    double dt) {
-  const double hip_offset = DegreesToRadians(hip_offset_deg);
-  const double knee_offset = DegreesToRadians(knee_offset_deg);
-  const double hip_absolute = hip_joint_position + hip_offset;
-  const double calf_absolute = kPi - hip_offset + knee_joint_position + knee_offset;
-  const double theta_l2 = hip_absolute + calf_absolute - kPi;
-  const double x = kL1 * std::cos(hip_absolute) + kL2 * std::cos(theta_l2);
-  const double y_clockwise =
-      kL1 * std::sin(hip_absolute) + kL2 * std::sin(theta_l2);
-
-  JointKinematics output;
-  output.hip_absolute = hip_absolute;
-  output.calf_absolute = calf_absolute;
-  output.leg_length = std::sqrt(x * x + y_clockwise * y_clockwise);
-  output.phi = std::atan2(y_clockwise, x);
-
-  if (dt <= 0.0 || !has_previous_phi) {
-    output.phi_rate = 0.0;
-  } else {
-    const double raw_phi_rate =
-        NormalizeAngleDelta(output.phi - previous_phi) / dt;
-    output.phi_rate =
-        kPhiRateLowPassAlpha * filtered_phi_rate +
-        (1.0 - kPhiRateLowPassAlpha) * raw_phi_rate;
-  }
-
-  return output;
-}
 
 struct JointLimitProtectionConfig {
   double effort_threshold_nm = 3.0;
@@ -708,9 +650,11 @@ class Stm32BridgeNode : public rclcpp::Node {
     }
 
     const double left_knee_relative =
-        NormalizeAngleDelta(decoded.joint_position[1] - decoded.joint_position[0]);
+        NormalizeLimitAngleDelta(
+            decoded.joint_position[1] - decoded.joint_position[0]);
     const double right_knee_relative =
-        NormalizeAngleDelta(decoded.joint_position[4] - decoded.joint_position[3]);
+        NormalizeLimitAngleDelta(
+            decoded.joint_position[4] - decoded.joint_position[3]);
     std::array<float, kJointCount> commanded_efforts {};
     {
       std::scoped_lock lock(command_cache_mutex_);
@@ -821,54 +765,36 @@ class Stm32BridgeNode : public rclcpp::Node {
     robot_state_msg.header.stamp = stamp;
     robot_state_msg.header.frame_id = std::string(wheel_leg_hw::kImuFrame);
 
-    const double body_velocity =
-        0.5 * (decoded.joint_velocity[2] + decoded.joint_velocity[5]) *
-        kWheelRadius;
+    HardwareStateAssemblyInput hardware_input;
+    for (std::size_t i = 0; i < kJointCount; ++i) {
+      hardware_input.joint_position[i] = decoded.joint_position[i];
+      hardware_input.joint_velocity[i] = decoded.joint_velocity[i];
+    }
+
+    HardwareStateAssemblyOutput hardware_state;
     {
       std::scoped_lock lock(cache_mutex_);
-      if (dt > 0.0) {
-        cache_.body_distance += body_velocity * dt;
-      }
-      robot_state_msg.body_distance = cache_.body_distance;
+      hardware_state =
+          AssembleHardwareState(hardware_input, dt, &cache_.hardware_state);
     }
-    robot_state_msg.body_velocity = body_velocity;
+    robot_state_msg.body_distance = hardware_state.body_distance;
+    robot_state_msg.body_velocity = hardware_state.body_velocity;
     robot_state_msg.body_roll = decoded.roll;
     robot_state_msg.body_roll_rate = decoded.gyro_x;
     robot_state_msg.body_pitch = decoded.pitch;
     robot_state_msg.body_pitch_rate = decoded.gyro_y;
     robot_state_msg.body_yaw_rate = decoded.gyro_z;
 
-    JointKinematics left_leg;
-    JointKinematics right_leg;
-    {
-      std::scoped_lock lock(cache_mutex_);
-      left_leg = ComputeJointKinematics(
-          decoded.joint_position[0], decoded.joint_position[1],
-          kLeftHipOffsetDeg, kLeftKneeOffsetDeg, cache_.previous_left_phi,
-          cache_.filtered_left_phi_rate, cache_.has_previous_left_phi, dt);
-      cache_.previous_left_phi = left_leg.phi;
-      cache_.filtered_left_phi_rate = left_leg.phi_rate;
-      cache_.has_previous_left_phi = true;
-
-      right_leg = ComputeJointKinematics(
-          decoded.joint_position[3], decoded.joint_position[4],
-          kRightHipOffsetDeg, kRightKneeOffsetDeg, cache_.previous_right_phi,
-          cache_.filtered_right_phi_rate, cache_.has_previous_right_phi, dt);
-      cache_.previous_right_phi = right_leg.phi;
-      cache_.filtered_right_phi_rate = right_leg.phi_rate;
-      cache_.has_previous_right_phi = true;
-    }
-
-    robot_state_msg.left_hip_absolute = left_leg.hip_absolute;
-    robot_state_msg.left_calf_absolute = left_leg.calf_absolute;
-    robot_state_msg.left_leg_length = left_leg.leg_length;
-    robot_state_msg.left_phi = left_leg.phi;
-    robot_state_msg.left_phi_rate = left_leg.phi_rate;
-    robot_state_msg.right_hip_absolute = right_leg.hip_absolute;
-    robot_state_msg.right_calf_absolute = right_leg.calf_absolute;
-    robot_state_msg.right_leg_length = right_leg.leg_length;
-    robot_state_msg.right_phi = right_leg.phi;
-    robot_state_msg.right_phi_rate = right_leg.phi_rate;
+    robot_state_msg.left_hip_absolute = hardware_state.left_leg.hip_absolute;
+    robot_state_msg.left_calf_absolute = hardware_state.left_leg.calf_absolute;
+    robot_state_msg.left_leg_length = hardware_state.left_leg.leg_length;
+    robot_state_msg.left_phi = hardware_state.left_leg.phi;
+    robot_state_msg.left_phi_rate = hardware_state.left_leg.phi_rate;
+    robot_state_msg.right_hip_absolute = hardware_state.right_leg.hip_absolute;
+    robot_state_msg.right_calf_absolute = hardware_state.right_leg.calf_absolute;
+    robot_state_msg.right_leg_length = hardware_state.right_leg.leg_length;
+    robot_state_msg.right_phi = hardware_state.right_leg.phi;
+    robot_state_msg.right_phi_rate = hardware_state.right_leg.phi_rate;
 
     robot_state_pub_->publish(robot_state_msg);
     if (publish_imu_) {

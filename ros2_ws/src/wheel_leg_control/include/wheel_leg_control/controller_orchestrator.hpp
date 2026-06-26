@@ -22,7 +22,9 @@ class ControllerOrchestrator {
       const StandControlState& control_state);
   void SetTargets(const ControlTargets& targets);
   void SetTurnHipFeedforwardScale(double scale);
+  void SetStageConfig(const StandControlStageConfig& config);
   const ControlTargets& targets() const;
+  const StandControlStageConfig& stage_config() const;
   void ResetControllersForState(const StandControlState& control_state);
 
  private:

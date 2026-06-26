@@ -1,0 +1,17 @@
+wheel_leg_controller:
+  ros__parameters:
+    publish_control_command: true
+    enable_vmc: false
+    enable_lqr: false
+    enable_leg_length_pid: false
+    enable_heading_control: false
+    enable_anti_split: false
+    enable_roll_compensation: false
+    enable_wheel_output: false
+    enable_hip_output: false
+    enable_knee_output: false
+    hip_effort_limit: 3.0
+    knee_effort_limit: 3.0
+    wheel_effort_limit: 1.0
+    expected_dt_sec: 0.01
+    accepted_dt_tolerance_sec: 0.004

@@ -39,3 +39,5 @@ ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
 
   清理限位急停
   ros2 service call /stm32_bridge/clear_local_estop std_srvs/srv/Trigger
+
+  ros2 param set /wheel_leg_controller debug_plot_publish_hz 20.0

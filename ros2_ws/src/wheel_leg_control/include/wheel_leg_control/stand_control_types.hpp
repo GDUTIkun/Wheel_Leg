@@ -14,6 +14,18 @@ struct ControlTargets {
   double target_pitch = 0.0;
 };
 
+struct StandControlStageConfig {
+  bool enable_vmc = true;
+  bool enable_lqr = true;
+  bool enable_leg_length_pid = true;
+  bool enable_heading_control = true;
+  bool enable_anti_split = true;
+  bool enable_roll_compensation = true;
+  bool enable_wheel_output = true;
+  bool enable_hip_output = true;
+  bool enable_knee_output = true;
+};
+
 struct BodyControlState {
   double distance = 0.0;
   double velocity = 0.0;

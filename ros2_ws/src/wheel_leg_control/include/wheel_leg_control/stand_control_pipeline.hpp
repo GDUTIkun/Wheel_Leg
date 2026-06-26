@@ -22,6 +22,7 @@ ControlStepOutputs RunStandControlStep(
     const ControlTargets& targets,
     const StandControlState& control_state,
     double turn_hip_feedforward_scale,
+    const StandControlStageConfig& stage_config,
     const ControlAlgorithmSet& algorithms);
 
 }  // namespace wheel_leg_control

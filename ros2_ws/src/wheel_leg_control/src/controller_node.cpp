@@ -178,6 +178,24 @@ class ControllerNode : public rclcpp::Node {
 
     publish_control_command_ =
         declare_parameter<bool>("publish_control_command", true);
+    stage_config_.enable_vmc =
+        declare_parameter<bool>("enable_vmc", stage_config_.enable_vmc);
+    stage_config_.enable_lqr =
+        declare_parameter<bool>("enable_lqr", stage_config_.enable_lqr);
+    stage_config_.enable_leg_length_pid = declare_parameter<bool>(
+        "enable_leg_length_pid", stage_config_.enable_leg_length_pid);
+    stage_config_.enable_heading_control = declare_parameter<bool>(
+        "enable_heading_control", stage_config_.enable_heading_control);
+    stage_config_.enable_anti_split = declare_parameter<bool>(
+        "enable_anti_split", stage_config_.enable_anti_split);
+    stage_config_.enable_roll_compensation = declare_parameter<bool>(
+        "enable_roll_compensation", stage_config_.enable_roll_compensation);
+    stage_config_.enable_wheel_output = declare_parameter<bool>(
+        "enable_wheel_output", stage_config_.enable_wheel_output);
+    stage_config_.enable_hip_output = declare_parameter<bool>(
+        "enable_hip_output", stage_config_.enable_hip_output);
+    stage_config_.enable_knee_output = declare_parameter<bool>(
+        "enable_knee_output", stage_config_.enable_knee_output);
     hip_effort_limit_ =
         declare_parameter<double>("hip_effort_limit", 50.0);
     knee_effort_limit_ =
@@ -250,6 +268,7 @@ class ControllerNode : public rclcpp::Node {
     latest_control_mode_ = kModeStand;
     orchestrator_.ConfigurePidDefaults(pid_defaults_);
     orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
+    orchestrator_.SetStageConfig(stage_config_);
     parameter_callback_handle_ = add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter>& parameters) {
           return HandleParameterUpdate(parameters);
@@ -375,8 +394,54 @@ class ControllerNode : public rclcpp::Node {
     double next_turn_hip_feedforward_scale = turn_hip_feedforward_scale_;
     double next_expected_dt_sec = expected_dt_sec_;
     double next_accepted_dt_tolerance_sec = accepted_dt_tolerance_sec_;
+    StandControlStageConfig next_stage_config = stage_config_;
 
     for (const auto& parameter : parameters) {
+      if (parameter.get_name() == "enable_vmc") {
+        next_stage_config.enable_vmc = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_lqr") {
+        next_stage_config.enable_lqr = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_leg_length_pid") {
+        next_stage_config.enable_leg_length_pid = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_heading_control") {
+        next_stage_config.enable_heading_control = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_anti_split") {
+        next_stage_config.enable_anti_split = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_roll_compensation") {
+        next_stage_config.enable_roll_compensation = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_wheel_output") {
+        next_stage_config.enable_wheel_output = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_hip_output") {
+        next_stage_config.enable_hip_output = parameter.as_bool();
+        continue;
+      }
+
+      if (parameter.get_name() == "enable_knee_output") {
+        next_stage_config.enable_knee_output = parameter.as_bool();
+        continue;
+      }
+
       if (parameter.get_name() == "target_phi_deg") {
         next_target_phi_deg = parameter.as_double();
         if (!std::isfinite(next_target_phi_deg)) {
@@ -517,7 +582,38 @@ class ControllerNode : public rclcpp::Node {
     turn_hip_feedforward_scale_ = next_turn_hip_feedforward_scale;
     expected_dt_sec_ = next_expected_dt_sec;
     accepted_dt_tolerance_sec_ = next_accepted_dt_tolerance_sec;
+    const bool stage_config_changed =
+        next_stage_config.enable_vmc != stage_config_.enable_vmc ||
+        next_stage_config.enable_lqr != stage_config_.enable_lqr ||
+        next_stage_config.enable_leg_length_pid !=
+            stage_config_.enable_leg_length_pid ||
+        next_stage_config.enable_heading_control !=
+            stage_config_.enable_heading_control ||
+        next_stage_config.enable_anti_split !=
+            stage_config_.enable_anti_split ||
+        next_stage_config.enable_roll_compensation !=
+            stage_config_.enable_roll_compensation ||
+        next_stage_config.enable_wheel_output !=
+            stage_config_.enable_wheel_output ||
+        next_stage_config.enable_hip_output != stage_config_.enable_hip_output ||
+        next_stage_config.enable_knee_output != stage_config_.enable_knee_output;
+    stage_config_ = next_stage_config;
     orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
+    orchestrator_.SetStageConfig(stage_config_);
+    if (stage_config_changed) {
+      RCLCPP_WARN(
+          get_logger(),
+          "Updated control stage gates: vmc=%s lqr=%s leg_length=%s heading=%s anti_split=%s roll=%s wheel=%s hip=%s knee=%s",
+          stage_config_.enable_vmc ? "true" : "false",
+          stage_config_.enable_lqr ? "true" : "false",
+          stage_config_.enable_leg_length_pid ? "true" : "false",
+          stage_config_.enable_heading_control ? "true" : "false",
+          stage_config_.enable_anti_split ? "true" : "false",
+          stage_config_.enable_roll_compensation ? "true" : "false",
+          stage_config_.enable_wheel_output ? "true" : "false",
+          stage_config_.enable_hip_output ? "true" : "false",
+          stage_config_.enable_knee_output ? "true" : "false");
+    }
     invalid_dt_warning_logged_ = false;
     out_of_range_dt_warning_logged_ = false;
     return result;
@@ -1377,6 +1473,7 @@ class ControllerNode : public rclcpp::Node {
   }
 
   bool publish_control_command_ = false;
+  StandControlStageConfig stage_config_;
   bool clamp_warning_logged_ = false;
   bool has_processed_state_ = false;
   bool invalid_dt_warning_logged_ = false;
