@@ -5,6 +5,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(wheel_leg_bridge REQUIRED)
 find_package(wheel_leg_hw REQUIRED)
 find_package(wheel_leg_msgs REQUIRED)
@@ -19,6 +20,7 @@ ament_target_dependencies(wheel_leg_stm32_bridge_node
   rclcpp
   sensor_msgs
   std_msgs
+  std_srvs
   wheel_leg_bridge
   wheel_leg_hw
   wheel_leg_msgs
@@ -45,6 +47,6 @@ install(
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-ament_export_dependencies(rclcpp sensor_msgs std_msgs wheel_leg_bridge wheel_leg_hw wheel_leg_msgs)
+ament_export_dependencies(rclcpp sensor_msgs std_msgs std_srvs wheel_leg_bridge wheel_leg_hw wheel_leg_msgs)
 ament_export_include_directories(include)
 ament_package()

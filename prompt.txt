@@ -19,3 +19,23 @@ ros2 param set /mujoco_bridge enable_ros_command true
 ./scripts/run_host.sh control_only
 ./scripts/run_pi.sh hw
 ./scripts/run_pi.sh hw_core
+
+
+
+
+source ./ros2_ws/install/local_setup.bash
+
+ros2 launch wheel_leg_bringup hw.launch.py \
+  use_controller:=false \
+  command_enable:=true \
+  serial_device:=/dev/ttyAMA4 \
+  baud_rate:=921600
+
+ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
+  -p joint_name:=left_knee \
+  -p effort_nm:=4.0 \
+  -p publish_rate_hz:=50.0 \
+  -p mode:=constant
+
+  清理限位急停
+  ros2 service call /stm32_bridge/clear_local_estop std_srvs/srv/Trigger

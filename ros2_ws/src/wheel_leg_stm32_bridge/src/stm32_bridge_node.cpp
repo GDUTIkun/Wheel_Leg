@@ -23,6 +23,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32_multi_array.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include "wheel_leg_bridge/message_conversions.hpp"
 #include "wheel_leg_hw/interface_contract.hpp"
@@ -59,9 +60,9 @@ constexpr double kRightKneeOffsetDeg = 33.843;
 constexpr double kPhiRateLowPassAlpha = 0.95;
 // Maps ROS joint torque semantics to the motor-side polarity expected by STM32.
 constexpr std::array<float, kJointCount> kCommandEffortSigns = {
-    1.0f,
-    1.0f,
     -1.0f,
+    -1.0f,
+    1.0f,
     1.0f,
     1.0f,
     -1.0f,
@@ -418,6 +419,14 @@ class Stm32BridgeNode : public rclcpp::Node {
         "/stm32_bridge/status_text", 10);
     counters_pub_ = create_publisher<std_msgs::msg::UInt32MultiArray>(
         "/stm32_bridge/counters", 10);
+    clear_local_estop_srv_ = create_service<std_srvs::srv::Trigger>(
+        "/stm32_bridge/clear_local_estop",
+        [this](
+            const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+            std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          (void)request;
+          HandleClearLocalEstop(response);
+        });
 
     joint_command_sub_ = create_subscription<wheel_leg_msgs::msg::JointCommand>(
         "/joint_command", rclcpp::SystemDefaultsQoS(),
@@ -648,6 +657,47 @@ class Stm32BridgeNode : public rclcpp::Node {
       RCLCPP_ERROR(get_logger(), "Local estop triggered: %s", reason.c_str());
       SendCommandFrame({}, true);
     }
+  }
+
+  bool GetRcEstopActive() {
+    std::scoped_lock lock(rc_status_mutex_);
+    return have_rc_status_ && latest_rc_status_.estop_active;
+  }
+
+  void HandleClearLocalEstop(
+      const std::shared_ptr<std_srvs::srv::Trigger::Response>& response) {
+    bool was_active = false;
+    std::string previous_reason;
+    {
+      std::scoped_lock lock(local_estop_mutex_);
+      was_active = local_estop_active_;
+      previous_reason = local_estop_reason_;
+      local_estop_active_ = false;
+      local_estop_reason_.clear();
+    }
+
+    const bool rc_estop_active = GetRcEstopActive();
+    SendCommandFrame({}, rc_estop_active);
+
+    response->success = true;
+    if (!was_active) {
+      response->message =
+          rc_estop_active
+              ? "local_estop was already clear; RC estop is still active"
+              : "local_estop was already clear";
+      return;
+    }
+
+    std::ostringstream message;
+    message << "Cleared local_estop";
+    if (!previous_reason.empty()) {
+      message << " (previous_reason=" << previous_reason << ")";
+    }
+    if (rc_estop_active) {
+      message << "; RC estop is still active";
+    }
+    response->message = message.str();
+    RCLCPP_WARN(get_logger(), "%s", response->message.c_str());
   }
 
   void CheckJointLimitProtection(const ProtocolStateFrame& decoded) {
@@ -1032,6 +1082,7 @@ class Stm32BridgeNode : public rclcpp::Node {
   rclcpp::Subscription<wheel_leg_msgs::msg::JointCommand>::SharedPtr
       joint_command_sub_;
   rclcpp::Subscription<wheel_leg_msgs::msg::RcStatus>::SharedPtr rc_status_sub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_local_estop_srv_;
   rclcpp::TimerBase::SharedPtr status_timer_;
 };
 
