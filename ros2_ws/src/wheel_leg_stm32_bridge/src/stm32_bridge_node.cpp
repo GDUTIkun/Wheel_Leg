@@ -321,15 +321,15 @@ class Stm32BridgeNode : public rclcpp::Node {
     publish_joint_states_ =
         declare_parameter<bool>("publish_joint_states", true);
     hip_velocity_low_pass_alpha_ =
-        declare_parameter<double>("hip_velocity_low_pass_alpha", 0.57);
+        declare_parameter<double>("hip_velocity_low_pass_alpha", 0.60);
     knee_velocity_low_pass_alpha_ =
-        declare_parameter<double>("knee_velocity_low_pass_alpha", 0.62);
+        declare_parameter<double>("knee_velocity_low_pass_alpha", 0.65);
     wheel_velocity_low_pass_alpha_ =
-        declare_parameter<double>("wheel_velocity_low_pass_alpha", 0.73);
+        declare_parameter<double>("wheel_velocity_low_pass_alpha", 0.68);
     hardware_state_config_.phi_rate_low_pass_alpha =
-        declare_parameter<double>("phi_rate_low_pass_alpha", 0.57);
+        declare_parameter<double>("phi_rate_low_pass_alpha", 0.60);
     hardware_state_config_.length_rate_low_pass_alpha =
-        declare_parameter<double>("length_rate_low_pass_alpha", 0.73);
+        declare_parameter<double>("length_rate_low_pass_alpha", 0.62);
     hardware_state_config_.body_velocity_low_pass_alpha =
         declare_parameter<double>("body_velocity_low_pass_alpha", 0.73);
     status_period_sec_ = declare_parameter<double>("status_period_sec", 0.5);
@@ -1096,9 +1096,9 @@ class Stm32BridgeNode : public rclcpp::Node {
   bool command_enable_ = false;
   bool publish_imu_ = true;
   bool publish_joint_states_ = true;
-  double hip_velocity_low_pass_alpha_ = 0.57;
-  double knee_velocity_low_pass_alpha_ = 0.62;
-  double wheel_velocity_low_pass_alpha_ = 0.73;
+  double hip_velocity_low_pass_alpha_ = 0.60;
+  double knee_velocity_low_pass_alpha_ = 0.65;
+  double wheel_velocity_low_pass_alpha_ = 0.68;
   double status_period_sec_ = 0.0;
   JointLimitProtectionConfig joint_limit_protection_;
   HardwareStateAssemblerConfig hardware_state_config_;

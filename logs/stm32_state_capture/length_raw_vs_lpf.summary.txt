@@ -1,0 +1,48 @@
+samples=5912
+duration_sec=29.646404
+effective_sample_rate_hz=199.383
+frames_ok=5912
+crc_errors=0
+length_errors=0
+sync_losses=0
+unknown_types=0
+
+left_leg:
+  phi_mean_deg=70.053857
+  phi_std_deg=8.545328
+  phi_rate_raw_std_deg_s=15.165264
+  phi_rate_lpf_std_deg_s=10.587643
+  length_mean_m=0.266622
+  length_std_mm=63.521969
+  length_rate_raw_std_mm_s=114.555251
+  length_rate_lpf_std_mm_s=81.768053
+
+right_leg:
+  phi_mean_deg=75.694768
+  phi_std_deg=6.566092
+  phi_rate_raw_std_deg_s=13.565369
+  phi_rate_lpf_std_deg_s=8.883075
+  length_mean_m=0.289354
+  length_std_mm=54.115324
+  length_rate_raw_std_mm_s=91.311424
+  length_rate_lpf_std_mm_s=68.145918
+
+body_state_std:
+  body_distance_raw_std_m=0.005929
+  body_distance_lpf_std_m=0.005927
+  body_velocity_raw_std_m_s=0.008602
+  body_velocity_lpf_std_m_s=0.008438
+
+joint_velocity_std_rad_s:
+  left_hip_raw=0.255438
+  left_hip_lpf=0.254071
+  left_knee_raw=0.359112
+  left_knee_lpf=0.357796
+  left_wheel_raw=0.386240
+  left_wheel_lpf=0.382239
+  right_hip_raw=0.248985
+  right_hip_lpf=0.247588
+  right_knee_raw=0.313429
+  right_knee_lpf=0.313311
+  right_wheel_raw=0.114962
+  right_wheel_lpf=0.111835

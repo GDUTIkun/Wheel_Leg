@@ -11,8 +11,8 @@ struct HardwareStateAssemblerConfig {
   double wheel_radius = 0.05;
   double thigh_length = 0.18;
   double calf_length = 0.225;
-  double phi_rate_low_pass_alpha = 0.57;
-  double length_rate_low_pass_alpha = 0.73;
+  double phi_rate_low_pass_alpha = 0.60;
+  double length_rate_low_pass_alpha = 0.62;
   double body_velocity_low_pass_alpha = 0.73;
 };
 

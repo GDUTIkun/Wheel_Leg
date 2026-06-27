@@ -213,11 +213,15 @@ class CaptureRow:
     right_wheel_effort: float
     left_hip_absolute: float
     left_calf_absolute: float
+    left_leg_length_raw: float
     left_leg_length: float
+    right_leg_length_raw: float
     right_leg_length: float
     right_hip_absolute: float
     right_calf_absolute: float
+    left_phi_raw: float
     left_phi: float
+    right_phi_raw: float
     right_phi: float
     left_phi_rate_raw: float
     right_phi_rate_raw: float
@@ -488,11 +492,15 @@ def build_row(
         right_wheel_effort=frame.joint_effort[5],
         left_hip_absolute=frame.joint_position[0],
         left_calf_absolute=frame.joint_position[1],
+        left_leg_length_raw=left_leg_length,
         left_leg_length=left_leg_length,
+        right_leg_length_raw=right_leg_length,
         right_leg_length=right_leg_length,
         right_hip_absolute=frame.joint_position[3],
         right_calf_absolute=frame.joint_position[4],
+        left_phi_raw=left_phi,
         left_phi=left_phi,
+        right_phi_raw=right_phi,
         right_phi=right_phi,
         left_phi_rate_raw=left_phi_rate_raw,
         right_phi_rate_raw=right_phi_rate_raw,
@@ -683,12 +691,56 @@ def plot_rows(rows: list[CaptureRow], path: Path, plot_groups: list[str]) -> Non
             axis.set_ylabel("Nm")
             axis.set_title("Joint Effort")
         elif group == "leg_pose":
-            axis.plot(t, [math.degrees(row.left_phi) for row in rows], label="left_phi")
-            axis.plot(t, [math.degrees(row.right_phi) for row in rows], label="right_phi")
-            axis.plot(t, [row.left_leg_length for row in rows], label="left_length")
-            axis.plot(t, [row.right_leg_length for row in rows], label="right_length")
+            axis.plot(
+                t,
+                [math.degrees(row.left_phi_raw) for row in rows],
+                label="left_phi_raw",
+                alpha=0.4,
+            )
+            axis.plot(
+                t,
+                [math.degrees(row.left_phi) for row in rows],
+                label="left_phi_published",
+            )
+            axis.plot(
+                t,
+                [math.degrees(row.right_phi_raw) for row in rows],
+                label="right_phi_raw",
+                alpha=0.4,
+            )
+            axis.plot(
+                t,
+                [math.degrees(row.right_phi) for row in rows],
+                label="right_phi_published",
+            )
+            axis.plot(
+                t,
+                [row.left_leg_length_raw for row in rows],
+                label="left_length_raw",
+                alpha=0.4,
+                linestyle="--",
+            )
+            axis.plot(
+                t,
+                [row.left_leg_length for row in rows],
+                label="left_length_published",
+                linestyle="--",
+            )
+            axis.plot(
+                t,
+                [row.right_leg_length_raw for row in rows],
+                label="right_length_raw",
+                alpha=0.4,
+                linestyle="--",
+            )
+            axis.plot(
+                t,
+                [row.right_leg_length for row in rows],
+                label="right_length_published",
+                linestyle="--",
+            )
             axis.set_ylabel("deg / m")
-            axis.set_title("Derived Phi And Leg Length")
+            axis.set_title("Derived Phi And Leg Length Raw vs Published")
         elif group == "leg_rate":
             axis.plot(
                 t,
@@ -923,11 +975,15 @@ def build_row_from_ros(
         right_wheel_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "right_wheel"),
         left_hip_absolute=float(robot_state_filtered.left_hip_absolute),
         left_calf_absolute=float(robot_state_filtered.left_calf_absolute),
+        left_leg_length_raw=float(robot_state_raw.left_leg_length),
         left_leg_length=float(robot_state_filtered.left_leg_length),
+        right_leg_length_raw=float(robot_state_raw.right_leg_length),
         right_leg_length=float(robot_state_filtered.right_leg_length),
         right_hip_absolute=float(robot_state_filtered.right_hip_absolute),
         right_calf_absolute=float(robot_state_filtered.right_calf_absolute),
+        left_phi_raw=float(robot_state_raw.left_phi),
         left_phi=float(robot_state_filtered.left_phi),
+        right_phi_raw=float(robot_state_raw.right_phi),
         right_phi=float(robot_state_filtered.right_phi),
         left_phi_rate_raw=float(robot_state_raw.left_phi_rate),
         right_phi_rate_raw=float(robot_state_raw.right_phi_rate),
