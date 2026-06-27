@@ -51,7 +51,7 @@ LegKinematics ComputeLegKinematics(double hip_absolute,
                                    double calf_absolute) {
   const double delta = NormalizeAngleDelta(hip_absolute - calf_absolute);
   const double knee_joint_angle = kPi - delta;
-  const double lower_link_absolute = hip_absolute + kPi - knee_joint_angle;
+  const double lower_link_absolute = hip_absolute - kPi + knee_joint_angle;
   const double x = kL1 * std::cos(hip_absolute) +
                    kL2 * std::cos(lower_link_absolute);
   const double y_clockwise =

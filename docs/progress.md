@@ -120,7 +120,7 @@
 - 当前角度解算使用角速度积分；实机观测为向左转动时角度为正向增加，向右转动时角度为反向减小，后续需要与 ROS2 / LQR 使用的姿态方向统一。
 - 待确认左右腿 `phi` / `phi_rate` 正方向与 LQR 状态定义一致。
 - 当前腿部世界角约定为右侧水平轴 `0 deg`、顺时针为正、竖直向下 `90 deg`、竖直向上 `270 deg`；STM32 上报到 ROS bridge 的髋关节和小腿角已经是世界坐标系 absolute 角，bridge 不再叠加仿真 offset。
-- `2026-06-27` 已修正仿真侧和 STM32 bridge 的 `phi/leg_length` 解算：使用 `delta = hip_absolute - calf_absolute`、`knee_angle = pi - delta`，再由大小腿三角形求腿对角边和世界系 `phi`。
+- `2026-06-27` 已修正仿真侧和 STM32 bridge 的 `phi/leg_length` 解算：使用 `delta = hip_absolute - calf_absolute`、`knee_angle = pi - delta`、`lower_link_absolute = hip_absolute - pi + knee_angle`，再由大小腿三角形求腿对角边和世界系 `phi`。
 - 待复核 VMC 髋/膝力矩映射是否仍沿用旧串联二连杆雅可比。
 - 当前机械范围记录：hip 世界角活动范围为 `75 ~ 200 deg`；knee 自身相对角范围不包含 hip 转动，当前限位测试范围为 `-140 ~ -70 deg`；固件已加 `knee_limit_flag` 用于到达限位监测。
 - 待确认轮子前进方向与 `base_link.velocity` 正方向一致。

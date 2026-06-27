@@ -38,7 +38,7 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 - STM32 上报到 bridge 的髋和小腿角已经是世界坐标系 absolute 角，bridge 不再叠加仿真 offset。
 - 状态帧中的 `left_knee` / `right_knee` 位置槽位在控制语义里作为 `left_calf_absolute` / `right_calf_absolute` 使用。
 - 腿部机构不是串联二连杆，不能使用 `hip_absolute + calf_absolute - pi` 推下连杆角。
-- 腿部几何按实物平行四边形语义计算：`delta = hip_absolute - calf_absolute`，`knee_angle = pi - delta`，再用大小腿三角形求腿对角边 `leg_length` 与世界系腿角 `phi`。
+- 腿部几何按实物平行四边形语义计算：`delta = hip_absolute - calf_absolute`，`knee_angle = pi - delta`，`lower_link_absolute = hip_absolute - pi + knee_angle`，再用大小腿三角形求腿对角边 `leg_length` 与世界系腿角 `phi`。
 - `phi_rate` 由修正后的 `phi` 做角度差分和低通滤波。
 - VMC 的髋/膝力矩映射仍需按同一套几何复核，避免 `phi/leg_length` 已修正但雅可比仍沿用旧串联模型。
 

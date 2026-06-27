@@ -66,7 +66,7 @@ TEST(HardwareStateAssemblerTest, SolvesLegGeometryFromHipMinusCalfDelta) {
   const auto output = AssembleHardwareState(input, 0.1, &state, config);
 
   EXPECT_NEAR(output.left_leg.leg_length, std::sqrt(2.0), 1e-12);
-  EXPECT_NEAR(output.left_leg.phi, 3.0 * kHardwareStatePi / 4.0, 1e-12);
+  EXPECT_NEAR(output.left_leg.phi, kHardwareStatePi / 4.0, 1e-12);
   EXPECT_NEAR(output.right_leg.leg_length, output.left_leg.leg_length, 1e-12);
   EXPECT_NEAR(output.right_leg.phi, output.left_leg.phi, 1e-12);
 }

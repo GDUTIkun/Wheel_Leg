@@ -25,7 +25,7 @@ HardwareLegKinematics ComputeHardwareLegKinematics(
   const double delta = NormalizeAngleDelta(hip_absolute - calf_absolute);
   const double knee_joint_angle = kHardwareStatePi - delta;
   const double lower_link_absolute =
-      hip_absolute + kHardwareStatePi - knee_joint_angle;
+      hip_absolute - kHardwareStatePi + knee_joint_angle;
   const double x = config.thigh_length * std::cos(hip_absolute) +
                    config.calf_length * std::cos(lower_link_absolute);
   const double y_clockwise = config.thigh_length * std::sin(hip_absolute) +
