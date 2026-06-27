@@ -26,8 +26,8 @@ ros2 param set /mujoco_bridge enable_ros_command true
 source ./ros2_ws/install/local_setup.bash
 
 ros2 launch wheel_leg_bringup hw.launch.py \
-  use_controller:=false \
-  command_enable:=true \
+  use_controller:=true \
+  command_enable:=false \
   serial_device:=/dev/ttyAMA4 \
   baud_rate:=921600
 

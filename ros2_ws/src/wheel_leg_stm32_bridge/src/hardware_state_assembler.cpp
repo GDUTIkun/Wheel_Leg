@@ -15,18 +15,13 @@ double NormalizeAngleDelta(double angle_delta) {
 }
 
 HardwareLegKinematics ComputeHardwareLegKinematics(
-    double hip_joint_position,
-    double knee_joint_position,
-    double hip_offset_rad,
-    double knee_offset_rad,
+    double hip_absolute,
+    double calf_absolute,
     double previous_phi,
     double filtered_phi_rate,
     bool has_previous_phi,
     double dt,
     const HardwareStateAssemblerConfig& config) {
-  const double hip_absolute = hip_joint_position + hip_offset_rad;
-  const double calf_absolute =
-      kHardwareStatePi - hip_offset_rad + knee_joint_position + knee_offset_rad;
   const double theta_l2 = hip_absolute + calf_absolute - kHardwareStatePi;
   const double x = config.thigh_length * std::cos(hip_absolute) +
                    config.calf_length * std::cos(theta_l2);
@@ -71,7 +66,6 @@ HardwareStateAssemblyOutput AssembleHardwareState(
 
   output.left_leg = ComputeHardwareLegKinematics(
       input.joint_position[0], input.joint_position[1],
-      config.left_hip_offset_rad, config.left_knee_offset_rad,
       state->previous_left_phi, state->filtered_left_phi_rate,
       state->has_previous_left_phi, dt, config);
   state->previous_left_phi = output.left_leg.phi;
@@ -80,7 +74,6 @@ HardwareStateAssemblyOutput AssembleHardwareState(
 
   output.right_leg = ComputeHardwareLegKinematics(
       input.joint_position[3], input.joint_position[4],
-      config.right_hip_offset_rad, config.right_knee_offset_rad,
       state->previous_right_phi, state->filtered_right_phi_rate,
       state->has_previous_right_phi, dt, config);
   state->previous_right_phi = output.right_leg.phi;

@@ -27,10 +27,17 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 | 控制阶段门控 | 按传感器、VMC、LQR、航向、抗劈叉、roll 逐段打开控制输出 | `wheel_leg_control` | `[x] 代码已完成，[!] 待实机验证` |
 | 仿真参数入口 | 保持仿真全功能默认配置 | `wheel_leg_bringup/config/control_sim.yaml` | `[x] 代码已完成` |
 | 硬件参数入口 | 硬件默认保守配置，所有高风险环节默认关闭 | `wheel_leg_bringup/config/control_hw.yaml` | `[x] 代码已完成，[!] 待实机验证` |
-| 硬件状态装配 | 将 STM32 原始关节/IMU 数据映射到控制器语义 | `wheel_leg_stm32_bridge/hardware_state_assembler` | `[x] 代码已完成，[!] 待实机验证` |
+| 硬件状态装配 | 将 STM32 absolute 世界角/IMU 数据映射到控制器语义 | `wheel_leg_stm32_bridge/hardware_state_assembler` | `[x] 代码已完成，[!] 待实机验证` |
 | STM32 协议与执行 | 状态帧、命令帧、限幅、斜率、超时、急停 | `wheel_leg_stm32_bridge` / `firmware/stm32` | `[~] 联调中` |
 
 `wheel_leg_control` 不解析 STM32 二进制协议；STM32、串口、CAN 细节不得泄漏到控制层。
+
+硬件腿部角度口径：
+
+- 仿真侧仍由原始关节角叠加 offset 得到 `hip_absolute`、`calf_absolute`。
+- STM32 上报到 bridge 的髋和小腿角已经是世界坐标系 absolute 角，bridge 不再叠加仿真 offset。
+- 状态帧中的 `left_knee` / `right_knee` 位置槽位在控制语义里作为 `left_calf_absolute` / `right_calf_absolute` 使用。
+- 腿长、`phi` 和 `phi_rate` 由 `hip_absolute` 与 `calf_absolute` 直接计算。
 
 ## 3. 控制阶段参数
 
@@ -73,6 +80,7 @@ ros2 launch wheel_leg_bringup hw.launch.py use_controller:=false command_enable:
 确认项：
 
 - `pitch`、`pitch_rate`、`roll`、`yaw_rate` 方向和单位正确。
+- STM32 上传的 `hip` / `calf` 世界角无需二次 offset，`/robot_state` 中 `*_hip_absolute` 和 `*_calf_absolute` 应与实物世界角一致。
 - `phi`、`phi_rate` 左右一致，且与 LQR 状态定义一致。
 - `body_velocity` 与轮子前进方向一致。
 - `/robot_state` 时间戳稳定，控制周期可接近 `0.01s`。

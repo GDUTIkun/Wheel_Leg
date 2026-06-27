@@ -97,6 +97,14 @@ STM32 上传原始或近原始 IMU 数据，ROS 侧再映射到控制语义：
 
 若 STM32 内部使用 CAN ID、电机原始角度、编码器计数或角度制，必须在 STM32 或 bridge 映射层消解，不得泄漏到上层控制器。
 
+当前硬件腿部角度口径：
+
+- 仿真侧由原始关节角叠加 offset 得到 `hip_absolute`、`calf_absolute`。
+- STM32 上报的髋和小腿角已经是世界坐标系 absolute 角。
+- `left_hip` / `right_hip` 的 `position` 直接作为 `hip_absolute`。
+- `left_knee` / `right_knee` 的 `position` 在控制语义中直接作为 `calf_absolute`。
+- ROS bridge 不再对 STM32 上传的髋/小腿角叠加仿真 offset。
+
 ### 4.4 安全与诊断
 
 状态帧必须能观察通信和执行层安全状态：

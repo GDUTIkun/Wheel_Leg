@@ -11,10 +11,6 @@ struct HardwareStateAssemblerConfig {
   double wheel_radius = 0.05;
   double thigh_length = 0.18;
   double calf_length = 0.225;
-  double left_hip_offset_rad = 143.944 * kHardwareStatePi / 180.0;
-  double right_hip_offset_rad = 145.56 * kHardwareStatePi / 180.0;
-  double left_knee_offset_rad = 26.04 * kHardwareStatePi / 180.0;
-  double right_knee_offset_rad = 33.843 * kHardwareStatePi / 180.0;
   double phi_rate_low_pass_alpha = 0.95;
 };
 
@@ -51,10 +47,8 @@ struct HardwareStateAssemblyOutput {
 double NormalizeAngleDelta(double angle_delta);
 
 HardwareLegKinematics ComputeHardwareLegKinematics(
-    double hip_joint_position,
-    double knee_joint_position,
-    double hip_offset_rad,
-    double knee_offset_rad,
+    double hip_absolute,
+    double calf_absolute,
     double previous_phi,
     double filtered_phi_rate,
     bool has_previous_phi,
