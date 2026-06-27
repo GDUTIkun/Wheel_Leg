@@ -49,10 +49,13 @@ void UpdatePhiRate(LegKinematics* kinematics,
 LegKinematics ComputeLegKinematics(double hip_absolute,
                                    double knee_absolute,
                                    double calf_absolute) {
-  const double theta_l2 = hip_absolute + calf_absolute - kPi;
-  const double x = kL1 * std::cos(hip_absolute) + kL2 * std::cos(theta_l2);
+  const double delta = NormalizeAngleDelta(hip_absolute - calf_absolute);
+  const double knee_joint_angle = kPi - delta;
+  const double lower_link_absolute = hip_absolute + kPi - knee_joint_angle;
+  const double x = kL1 * std::cos(hip_absolute) +
+                   kL2 * std::cos(lower_link_absolute);
   const double y_clockwise =
-      kL1 * std::sin(hip_absolute) + kL2 * std::sin(theta_l2);
+      kL1 * std::sin(hip_absolute) + kL2 * std::sin(lower_link_absolute);
 
   LegKinematics output;
   output.hip_absolute = hip_absolute;
