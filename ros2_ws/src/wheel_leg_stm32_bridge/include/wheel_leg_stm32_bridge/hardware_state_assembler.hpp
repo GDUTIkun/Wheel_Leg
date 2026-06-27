@@ -11,7 +11,9 @@ struct HardwareStateAssemblerConfig {
   double wheel_radius = 0.05;
   double thigh_length = 0.18;
   double calf_length = 0.225;
-  double phi_rate_low_pass_alpha = 0.95;
+  double phi_rate_low_pass_alpha = 0.57;
+  double length_rate_low_pass_alpha = 0.73;
+  double body_velocity_low_pass_alpha = 0.73;
 };
 
 struct HardwareStateAssemblyInput {
@@ -22,11 +24,25 @@ struct HardwareStateAssemblyInput {
 struct HardwareStateAssemblyState {
   double previous_left_phi = 0.0;
   double previous_right_phi = 0.0;
+  double previous_left_leg_length = 0.0;
+  double previous_right_leg_length = 0.0;
   double filtered_left_phi_rate = 0.0;
   double filtered_right_phi_rate = 0.0;
+  double filtered_left_length_rate = 0.0;
+  double filtered_right_length_rate = 0.0;
+  double filtered_body_velocity = 0.0;
   bool has_previous_left_phi = false;
   bool has_previous_right_phi = false;
-  double body_distance = 0.0;
+  bool has_previous_left_leg_length = false;
+  bool has_previous_right_leg_length = false;
+  bool has_previous_body_velocity = false;
+  double raw_body_distance = 0.0;
+  double filtered_body_distance = 0.0;
+};
+
+struct HardwareStateSignal {
+  double raw = 0.0;
+  double filtered = 0.0;
 };
 
 struct HardwareLegKinematics {
@@ -34,12 +50,13 @@ struct HardwareLegKinematics {
   double calf_absolute = 0.0;
   double leg_length = 0.0;
   double phi = 0.0;
-  double phi_rate = 0.0;
+  HardwareStateSignal phi_rate;
+  HardwareStateSignal length_rate;
 };
 
 struct HardwareStateAssemblyOutput {
-  double body_distance = 0.0;
-  double body_velocity = 0.0;
+  HardwareStateSignal body_distance;
+  HardwareStateSignal body_velocity;
   HardwareLegKinematics left_leg;
   HardwareLegKinematics right_leg;
 };
@@ -49,8 +66,11 @@ double NormalizeAngleDelta(double angle_delta);
 HardwareLegKinematics ComputeHardwareLegKinematics(
     double hip_absolute,
     double calf_absolute,
+    double previous_leg_length,
     double previous_phi,
+    double filtered_length_rate,
     double filtered_phi_rate,
+    bool has_previous_leg_length,
     bool has_previous_phi,
     double dt,
     const HardwareStateAssemblerConfig& config);

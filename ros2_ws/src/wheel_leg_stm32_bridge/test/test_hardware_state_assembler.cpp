@@ -20,11 +20,14 @@ TEST(HardwareStateAssemblerTest, ComputesBodyVelocityDistanceAndLegGeometry) {
 
   const auto output = AssembleHardwareState(input, 0.1, &state, config);
 
-  EXPECT_DOUBLE_EQ(output.body_velocity, 1.0);
-  EXPECT_DOUBLE_EQ(output.body_distance, 0.1);
+  EXPECT_DOUBLE_EQ(output.body_velocity.raw, 1.0);
+  EXPECT_DOUBLE_EQ(output.body_velocity.filtered, 1.0);
+  EXPECT_DOUBLE_EQ(output.body_distance.raw, 0.1);
+  EXPECT_DOUBLE_EQ(output.body_distance.filtered, 0.1);
   EXPECT_NEAR(output.left_leg.leg_length, 2.0, 1e-12);
   EXPECT_NEAR(output.left_leg.phi, 0.0, 1e-12);
-  EXPECT_DOUBLE_EQ(output.left_leg.phi_rate, 0.0);
+  EXPECT_DOUBLE_EQ(output.left_leg.phi_rate.raw, 0.0);
+  EXPECT_DOUBLE_EQ(output.left_leg.phi_rate.filtered, 0.0);
   EXPECT_NEAR(output.right_leg.leg_length, 2.0, 1e-12);
   EXPECT_NEAR(output.right_leg.phi, 0.0, 1e-12);
 }
@@ -88,9 +91,11 @@ TEST(HardwareStateAssemblerTest, FiltersPhiRateFromPreviousSample) {
   const auto output = AssembleHardwareState(input, 0.1, &state, config);
 
   EXPECT_NEAR(output.left_leg.phi, kHardwareStatePi / 2.0, 1e-12);
-  EXPECT_NEAR(output.left_leg.phi_rate, 0.5 * (kHardwareStatePi / 2.0) / 0.1,
-              1e-12);
-  EXPECT_NEAR(output.right_leg.phi_rate, output.left_leg.phi_rate, 1e-12);
+  EXPECT_NEAR(
+      output.left_leg.phi_rate.filtered, 0.5 * (kHardwareStatePi / 2.0) / 0.1,
+      1e-12);
+  EXPECT_NEAR(output.right_leg.phi_rate.filtered,
+              output.left_leg.phi_rate.filtered, 1e-12);
 }
 
 }  // namespace

@@ -169,7 +169,9 @@ class CaptureRow:
     elapsed_sec: float
     stm_tick_ms: int
     stm_time_sec: float
+    body_distance_raw: float
     body_distance: float
+    body_velocity_raw: float
     body_velocity: float
     body_roll: float
     body_roll_rate: float
@@ -191,11 +193,17 @@ class CaptureRow:
     right_hip_pos: float
     right_knee_pos: float
     right_wheel_pos: float
+    left_hip_vel_raw: float
     left_hip_vel: float
+    left_knee_vel_raw: float
     left_knee_vel: float
+    left_wheel_vel_raw: float
     left_wheel_vel: float
+    right_hip_vel_raw: float
     right_hip_vel: float
+    right_knee_vel_raw: float
     right_knee_vel: float
+    right_wheel_vel_raw: float
     right_wheel_vel: float
     left_hip_effort: float
     left_knee_effort: float
@@ -436,7 +444,9 @@ def build_row(
         elapsed_sec=host_time_sec - first_host_time_sec,
         stm_tick_ms=frame.stm_tick_ms,
         stm_time_sec=frame.stm_tick_ms * 1e-3,
+        body_distance_raw=math.nan,
         body_distance=math.nan,
+        body_velocity_raw=math.nan,
         body_velocity=math.nan,
         body_roll=frame.roll,
         body_roll_rate=frame.gyro_x,
@@ -458,11 +468,17 @@ def build_row(
         right_hip_pos=frame.joint_position[3],
         right_knee_pos=frame.joint_position[4],
         right_wheel_pos=frame.joint_position[5],
+        left_hip_vel_raw=frame.joint_velocity[0],
         left_hip_vel=frame.joint_velocity[0],
+        left_knee_vel_raw=frame.joint_velocity[1],
         left_knee_vel=frame.joint_velocity[1],
+        left_wheel_vel_raw=frame.joint_velocity[2],
         left_wheel_vel=frame.joint_velocity[2],
+        right_hip_vel_raw=frame.joint_velocity[3],
         right_hip_vel=frame.joint_velocity[3],
+        right_knee_vel_raw=frame.joint_velocity[4],
         right_knee_vel=frame.joint_velocity[4],
+        right_wheel_vel_raw=frame.joint_velocity[5],
         right_wheel_vel=frame.joint_velocity[5],
         left_hip_effort=frame.joint_effort[0],
         left_knee_effort=frame.joint_effort[1],
@@ -513,12 +529,18 @@ def write_summary(rows: list[CaptureRow], parser: FrameParser, path: Path) -> No
     right_phi_std_deg = math.degrees(finite_std(row.right_phi for row in rows))
     left_length_std_mm = finite_std(row.left_leg_length for row in rows) * 1000.0
     right_length_std_mm = finite_std(row.right_leg_length for row in rows) * 1000.0
-    left_hip_vel_std = finite_std(row.left_hip_vel for row in rows)
-    left_knee_vel_std = finite_std(row.left_knee_vel for row in rows)
-    left_wheel_vel_std = finite_std(row.left_wheel_vel for row in rows)
-    right_hip_vel_std = finite_std(row.right_hip_vel for row in rows)
-    right_knee_vel_std = finite_std(row.right_knee_vel for row in rows)
-    right_wheel_vel_std = finite_std(row.right_wheel_vel for row in rows)
+    left_hip_vel_raw_std = finite_std(row.left_hip_vel_raw for row in rows)
+    left_hip_vel_lpf_std = finite_std(row.left_hip_vel for row in rows)
+    left_knee_vel_raw_std = finite_std(row.left_knee_vel_raw for row in rows)
+    left_knee_vel_lpf_std = finite_std(row.left_knee_vel for row in rows)
+    left_wheel_vel_raw_std = finite_std(row.left_wheel_vel_raw for row in rows)
+    left_wheel_vel_lpf_std = finite_std(row.left_wheel_vel for row in rows)
+    right_hip_vel_raw_std = finite_std(row.right_hip_vel_raw for row in rows)
+    right_hip_vel_lpf_std = finite_std(row.right_hip_vel for row in rows)
+    right_knee_vel_raw_std = finite_std(row.right_knee_vel_raw for row in rows)
+    right_knee_vel_lpf_std = finite_std(row.right_knee_vel for row in rows)
+    right_wheel_vel_raw_std = finite_std(row.right_wheel_vel_raw for row in rows)
+    right_wheel_vel_lpf_std = finite_std(row.right_wheel_vel for row in rows)
 
     lines = [
         f"samples={len(rows)}",
@@ -550,13 +572,25 @@ def write_summary(rows: list[CaptureRow], parser: FrameParser, path: Path) -> No
         f"  length_rate_raw_std_mm_s={finite_std(row.right_length_rate_raw for row in rows) * 1000.0:.6f}",
         f"  length_rate_lpf_std_mm_s={finite_std(row.right_length_rate_lpf for row in rows) * 1000.0:.6f}",
         "",
+        "body_state_std:",
+        f"  body_distance_raw_std_m={finite_std(row.body_distance_raw for row in rows):.6f}",
+        f"  body_distance_lpf_std_m={finite_std(row.body_distance for row in rows):.6f}",
+        f"  body_velocity_raw_std_m_s={finite_std(row.body_velocity_raw for row in rows):.6f}",
+        f"  body_velocity_lpf_std_m_s={finite_std(row.body_velocity for row in rows):.6f}",
+        "",
         "joint_velocity_std_rad_s:",
-        f"  left_hip={left_hip_vel_std:.6f}",
-        f"  left_knee={left_knee_vel_std:.6f}",
-        f"  left_wheel={left_wheel_vel_std:.6f}",
-        f"  right_hip={right_hip_vel_std:.6f}",
-        f"  right_knee={right_knee_vel_std:.6f}",
-        f"  right_wheel={right_wheel_vel_std:.6f}",
+        f"  left_hip_raw={left_hip_vel_raw_std:.6f}",
+        f"  left_hip_lpf={left_hip_vel_lpf_std:.6f}",
+        f"  left_knee_raw={left_knee_vel_raw_std:.6f}",
+        f"  left_knee_lpf={left_knee_vel_lpf_std:.6f}",
+        f"  left_wheel_raw={left_wheel_vel_raw_std:.6f}",
+        f"  left_wheel_lpf={left_wheel_vel_lpf_std:.6f}",
+        f"  right_hip_raw={right_hip_vel_raw_std:.6f}",
+        f"  right_hip_lpf={right_hip_vel_lpf_std:.6f}",
+        f"  right_knee_raw={right_knee_vel_raw_std:.6f}",
+        f"  right_knee_lpf={right_knee_vel_lpf_std:.6f}",
+        f"  right_wheel_raw={right_wheel_vel_raw_std:.6f}",
+        f"  right_wheel_lpf={right_wheel_vel_lpf_std:.6f}",
     ]
     path.write_text("\n".join(lines) + "\n")
 
@@ -576,8 +610,20 @@ def plot_rows(rows: list[CaptureRow], path: Path, plot_groups: list[str]) -> Non
 
     for axis, group in zip(axes, plot_groups):
         if group == "body_state":
-            axis.plot(t, [row.body_distance for row in rows], label="body_distance")
-            axis.plot(t, [row.body_velocity for row in rows], label="body_velocity")
+            axis.plot(
+                t,
+                [row.body_distance_raw for row in rows],
+                label="body_distance_raw",
+                alpha=0.45,
+            )
+            axis.plot(t, [row.body_distance for row in rows], label="body_distance_lpf")
+            axis.plot(
+                t,
+                [row.body_velocity_raw for row in rows],
+                label="body_velocity_raw",
+                alpha=0.45,
+            )
+            axis.plot(t, [row.body_velocity for row in rows], label="body_velocity_lpf")
             axis.plot(t, [math.degrees(row.body_roll) for row in rows], label="body_roll_deg")
             axis.plot(t, [math.degrees(row.body_pitch) for row in rows], label="body_pitch_deg")
             axis.plot(t, [row.body_roll_rate for row in rows], label="body_roll_rate")
@@ -613,14 +659,20 @@ def plot_rows(rows: list[CaptureRow], path: Path, plot_groups: list[str]) -> Non
             axis.set_ylabel("rad")
             axis.set_title("Joint Position")
         elif group == "joint_vel":
-            axis.plot(t, [row.left_hip_vel for row in rows], label="left_hip_vel")
-            axis.plot(t, [row.left_knee_vel for row in rows], label="left_knee_vel")
-            axis.plot(t, [row.left_wheel_vel for row in rows], label="left_wheel_vel")
-            axis.plot(t, [row.right_hip_vel for row in rows], label="right_hip_vel")
-            axis.plot(t, [row.right_knee_vel for row in rows], label="right_knee_vel")
-            axis.plot(t, [row.right_wheel_vel for row in rows], label="right_wheel_vel")
+            axis.plot(t, [row.left_hip_vel_raw for row in rows], label="left_hip_raw", alpha=0.4)
+            axis.plot(t, [row.left_hip_vel for row in rows], label="left_hip_lpf")
+            axis.plot(t, [row.left_knee_vel_raw for row in rows], label="left_knee_raw", alpha=0.4)
+            axis.plot(t, [row.left_knee_vel for row in rows], label="left_knee_lpf")
+            axis.plot(t, [row.left_wheel_vel_raw for row in rows], label="left_wheel_raw", alpha=0.4)
+            axis.plot(t, [row.left_wheel_vel for row in rows], label="left_wheel_lpf")
+            axis.plot(t, [row.right_hip_vel_raw for row in rows], label="right_hip_raw", alpha=0.4)
+            axis.plot(t, [row.right_hip_vel for row in rows], label="right_hip_lpf")
+            axis.plot(t, [row.right_knee_vel_raw for row in rows], label="right_knee_raw", alpha=0.4)
+            axis.plot(t, [row.right_knee_vel for row in rows], label="right_knee_lpf")
+            axis.plot(t, [row.right_wheel_vel_raw for row in rows], label="right_wheel_raw", alpha=0.4)
+            axis.plot(t, [row.right_wheel_vel for row in rows], label="right_wheel_lpf")
             axis.set_ylabel("rad/s")
-            axis.set_title("Joint Velocity")
+            axis.set_title("Joint Velocity Raw vs LPF")
         elif group == "joint_effort":
             axis.plot(t, [row.left_hip_effort for row in rows], label="left_hip_effort")
             axis.plot(t, [row.left_knee_effort for row in rows], label="left_knee_effort")
@@ -662,8 +714,22 @@ def plot_rows(rows: list[CaptureRow], path: Path, plot_groups: list[str]) -> Non
             )
             axis.plot(
                 t,
+                [row.left_length_rate_raw * 1000.0 for row in rows],
+                label="left_length_rate_raw_mm_s",
+                alpha=0.35,
+                linestyle="--",
+            )
+            axis.plot(
+                t,
                 [row.left_length_rate_lpf * 1000.0 for row in rows],
                 label="left_length_rate_lpf_mm_s",
+                linestyle="--",
+            )
+            axis.plot(
+                t,
+                [row.right_length_rate_raw * 1000.0 for row in rows],
+                label="right_length_rate_raw_mm_s",
+                alpha=0.35,
                 linestyle="--",
             )
             axis.plot(
@@ -765,17 +831,23 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_row_from_ros(
-    robot_state,
-    joint_state,
+    robot_state_filtered,
+    robot_state_raw,
+    joint_state_filtered,
+    joint_state_raw,
     imu_msg,
     counters,
+    leg_length_rate_debug,
     host_time_sec: float,
     first_host_time_sec: float,
 ) -> CaptureRow:
-    joint_index = {name: index for index, name in enumerate(joint_state.name)}
+    joint_index_filtered = {
+        name: index for index, name in enumerate(joint_state_filtered.name)
+    }
+    joint_index_raw = {name: index for index, name in enumerate(joint_state_raw.name)}
 
-    def get_joint_value(values: list[float], name: str) -> float:
-        index = joint_index.get(name)
+    def get_joint_value(values: list[float], index_map: dict[str, int], name: str) -> float:
+        index = index_map.get(name)
         if index is None or index >= len(values):
             return math.nan
         return float(values[index])
@@ -786,8 +858,18 @@ def build_row_from_ros(
         return math.atan2(siny_cosp, cosy_cosp)
 
     counter_values = list(counters.data) if counters is not None else []
+    leg_rate_values = (
+        (
+            float(leg_length_rate_debug.ref_primary),
+            float(leg_length_rate_debug.now_primary),
+            float(leg_length_rate_debug.ref_secondary),
+            float(leg_length_rate_debug.now_secondary),
+        )
+        if leg_length_rate_debug is not None
+        else (math.nan, math.nan, math.nan, math.nan)
+    )
 
-    stamp = robot_state.header.stamp
+    stamp = robot_state_filtered.header.stamp
     stm_time_sec = float(stamp.sec) + float(stamp.nanosec) * 1e-9
     stm_tick_ms = int(round(stm_time_sec * 1000.0))
     yaw = quat_to_yaw(imu_msg.orientation) if imu_msg is not None else math.nan
@@ -797,56 +879,64 @@ def build_row_from_ros(
         elapsed_sec=host_time_sec - first_host_time_sec,
         stm_tick_ms=stm_tick_ms,
         stm_time_sec=stm_time_sec,
-        body_distance=float(robot_state.body_distance),
-        body_velocity=float(robot_state.body_velocity),
-        body_roll=float(robot_state.body_roll),
-        body_roll_rate=float(robot_state.body_roll_rate),
-        body_pitch=float(robot_state.body_pitch),
-        body_pitch_rate=float(robot_state.body_pitch_rate),
-        body_yaw_rate=float(robot_state.body_yaw_rate),
-        roll=float(robot_state.body_roll),
-        pitch=float(robot_state.body_pitch),
+        body_distance_raw=float(robot_state_raw.body_distance),
+        body_distance=float(robot_state_filtered.body_distance),
+        body_velocity_raw=float(robot_state_raw.body_velocity),
+        body_velocity=float(robot_state_filtered.body_velocity),
+        body_roll=float(robot_state_filtered.body_roll),
+        body_roll_rate=float(robot_state_filtered.body_roll_rate),
+        body_pitch=float(robot_state_filtered.body_pitch),
+        body_pitch_rate=float(robot_state_filtered.body_pitch_rate),
+        body_yaw_rate=float(robot_state_filtered.body_yaw_rate),
+        roll=float(robot_state_filtered.body_roll),
+        pitch=float(robot_state_filtered.body_pitch),
         yaw=float(yaw),
-        gyro_x=float(imu_msg.angular_velocity.x) if imu_msg is not None else float(robot_state.body_roll_rate),
-        gyro_y=float(imu_msg.angular_velocity.y) if imu_msg is not None else float(robot_state.body_pitch_rate),
-        gyro_z=float(imu_msg.angular_velocity.z) if imu_msg is not None else float(robot_state.body_yaw_rate),
+        gyro_x=float(imu_msg.angular_velocity.x) if imu_msg is not None else float(robot_state_filtered.body_roll_rate),
+        gyro_y=float(imu_msg.angular_velocity.y) if imu_msg is not None else float(robot_state_filtered.body_pitch_rate),
+        gyro_z=float(imu_msg.angular_velocity.z) if imu_msg is not None else float(robot_state_filtered.body_yaw_rate),
         acc_x=float(imu_msg.linear_acceleration.x) if imu_msg is not None else math.nan,
         acc_y=float(imu_msg.linear_acceleration.y) if imu_msg is not None else math.nan,
         acc_z=float(imu_msg.linear_acceleration.z) if imu_msg is not None else math.nan,
-        left_hip_pos=get_joint_value(joint_state.position, "left_hip"),
-        left_knee_pos=get_joint_value(joint_state.position, "left_knee"),
-        left_wheel_pos=get_joint_value(joint_state.position, "left_wheel"),
-        right_hip_pos=get_joint_value(joint_state.position, "right_hip"),
-        right_knee_pos=get_joint_value(joint_state.position, "right_knee"),
-        right_wheel_pos=get_joint_value(joint_state.position, "right_wheel"),
-        left_hip_vel=get_joint_value(joint_state.velocity, "left_hip"),
-        left_knee_vel=get_joint_value(joint_state.velocity, "left_knee"),
-        left_wheel_vel=get_joint_value(joint_state.velocity, "left_wheel"),
-        right_hip_vel=get_joint_value(joint_state.velocity, "right_hip"),
-        right_knee_vel=get_joint_value(joint_state.velocity, "right_knee"),
-        right_wheel_vel=get_joint_value(joint_state.velocity, "right_wheel"),
-        left_hip_effort=get_joint_value(joint_state.effort, "left_hip"),
-        left_knee_effort=get_joint_value(joint_state.effort, "left_knee"),
-        left_wheel_effort=get_joint_value(joint_state.effort, "left_wheel"),
-        right_hip_effort=get_joint_value(joint_state.effort, "right_hip"),
-        right_knee_effort=get_joint_value(joint_state.effort, "right_knee"),
-        right_wheel_effort=get_joint_value(joint_state.effort, "right_wheel"),
-        left_hip_absolute=float(robot_state.left_hip_absolute),
-        left_calf_absolute=float(robot_state.left_calf_absolute),
-        left_leg_length=float(robot_state.left_leg_length),
-        right_leg_length=float(robot_state.right_leg_length),
-        right_hip_absolute=float(robot_state.right_hip_absolute),
-        right_calf_absolute=float(robot_state.right_calf_absolute),
-        left_phi=float(robot_state.left_phi),
-        right_phi=float(robot_state.right_phi),
-        left_phi_rate_raw=float(robot_state.left_phi_rate),
-        right_phi_rate_raw=float(robot_state.right_phi_rate),
-        left_phi_rate_lpf=float(robot_state.left_phi_rate),
-        right_phi_rate_lpf=float(robot_state.right_phi_rate),
-        left_length_rate_raw=math.nan,
-        right_length_rate_raw=math.nan,
-        left_length_rate_lpf=math.nan,
-        right_length_rate_lpf=math.nan,
+        left_hip_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "left_hip"),
+        left_knee_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "left_knee"),
+        left_wheel_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "left_wheel"),
+        right_hip_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "right_hip"),
+        right_knee_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "right_knee"),
+        right_wheel_pos=get_joint_value(joint_state_filtered.position, joint_index_filtered, "right_wheel"),
+        left_hip_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "left_hip"),
+        left_hip_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "left_hip"),
+        left_knee_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "left_knee"),
+        left_knee_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "left_knee"),
+        left_wheel_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "left_wheel"),
+        left_wheel_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "left_wheel"),
+        right_hip_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "right_hip"),
+        right_hip_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "right_hip"),
+        right_knee_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "right_knee"),
+        right_knee_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "right_knee"),
+        right_wheel_vel_raw=get_joint_value(joint_state_raw.velocity, joint_index_raw, "right_wheel"),
+        right_wheel_vel=get_joint_value(joint_state_filtered.velocity, joint_index_filtered, "right_wheel"),
+        left_hip_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "left_hip"),
+        left_knee_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "left_knee"),
+        left_wheel_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "left_wheel"),
+        right_hip_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "right_hip"),
+        right_knee_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "right_knee"),
+        right_wheel_effort=get_joint_value(joint_state_filtered.effort, joint_index_filtered, "right_wheel"),
+        left_hip_absolute=float(robot_state_filtered.left_hip_absolute),
+        left_calf_absolute=float(robot_state_filtered.left_calf_absolute),
+        left_leg_length=float(robot_state_filtered.left_leg_length),
+        right_leg_length=float(robot_state_filtered.right_leg_length),
+        right_hip_absolute=float(robot_state_filtered.right_hip_absolute),
+        right_calf_absolute=float(robot_state_filtered.right_calf_absolute),
+        left_phi=float(robot_state_filtered.left_phi),
+        right_phi=float(robot_state_filtered.right_phi),
+        left_phi_rate_raw=float(robot_state_raw.left_phi_rate),
+        right_phi_rate_raw=float(robot_state_raw.right_phi_rate),
+        left_phi_rate_lpf=float(robot_state_filtered.left_phi_rate),
+        right_phi_rate_lpf=float(robot_state_filtered.right_phi_rate),
+        left_length_rate_raw=leg_rate_values[0],
+        right_length_rate_raw=leg_rate_values[2],
+        left_length_rate_lpf=leg_rate_values[1],
+        right_length_rate_lpf=leg_rate_values[3],
         online_mask=-1,
         safety_state=-1,
         last_command_timeout=-1,
@@ -880,8 +970,8 @@ def recompute_leg_rate_columns(
         if dt > 0.0:
             computed_left_phi_rate = normalize_angle_delta(row.left_phi - prev_row.left_phi) / dt
             computed_right_phi_rate = normalize_angle_delta(row.right_phi - prev_row.right_phi) / dt
-            row.left_length_rate_raw = (row.left_leg_length - prev_row.left_leg_length) / dt
-            row.right_length_rate_raw = (row.right_leg_length - prev_row.right_leg_length) / dt
+            computed_left_length_rate = (row.left_leg_length - prev_row.left_leg_length) / dt
+            computed_right_length_rate = (row.right_leg_length - prev_row.right_leg_length) / dt
 
             if not math.isfinite(row.left_phi_rate_raw):
                 row.left_phi_rate_raw = computed_left_phi_rate
@@ -897,15 +987,20 @@ def recompute_leg_rate_columns(
                     phi_rate_lpf_alpha * prev_row.right_phi_rate_lpf
                     + (1.0 - phi_rate_lpf_alpha) * row.right_phi_rate_raw
                 )
-
-            row.left_length_rate_lpf = (
-                length_rate_lpf_alpha * prev_row.left_length_rate_lpf
-                + (1.0 - length_rate_lpf_alpha) * row.left_length_rate_raw
-            )
-            row.right_length_rate_lpf = (
-                length_rate_lpf_alpha * prev_row.right_length_rate_lpf
-                + (1.0 - length_rate_lpf_alpha) * row.right_length_rate_raw
-            )
+            if not math.isfinite(row.left_length_rate_raw):
+                row.left_length_rate_raw = computed_left_length_rate
+            if not math.isfinite(row.right_length_rate_raw):
+                row.right_length_rate_raw = computed_right_length_rate
+            if not math.isfinite(row.left_length_rate_lpf):
+                row.left_length_rate_lpf = (
+                    length_rate_lpf_alpha * prev_row.left_length_rate_lpf
+                    + (1.0 - length_rate_lpf_alpha) * row.left_length_rate_raw
+                )
+            if not math.isfinite(row.right_length_rate_lpf):
+                row.right_length_rate_lpf = (
+                    length_rate_lpf_alpha * prev_row.right_length_rate_lpf
+                    + (1.0 - length_rate_lpf_alpha) * row.right_length_rate_raw
+                )
         else:
             row.left_length_rate_raw = prev_row.left_length_rate_raw
             row.right_length_rate_raw = prev_row.right_length_rate_raw
@@ -928,7 +1023,7 @@ def capture_from_ros(args: argparse.Namespace) -> list[CaptureRow]:
         from rclpy.node import Node
         from sensor_msgs.msg import Imu, JointState
         from std_msgs.msg import UInt32MultiArray
-        from wheel_leg_msgs.msg import StandControlState
+        from wheel_leg_msgs.msg import ControlLoopDebug, StandControlState
     except ImportError as exc:
         raise SystemExit(
             "ROS Python messages are required for --source ros. "
@@ -940,20 +1035,40 @@ def capture_from_ros(args: argparse.Namespace) -> list[CaptureRow]:
             super().__init__("stm32_state_capture")
             self.rows: list[CaptureRow] = []
             self.first_host_time_sec: float | None = None
-            self.latest_joint_state: JointState | None = None
+            self.latest_joint_state_filtered: JointState | None = None
+            self.latest_joint_state_raw: JointState | None = None
             self.latest_imu: Imu | None = None
             self.latest_counters: UInt32MultiArray | None = None
-            self.create_subscription(JointState, "/joint_states", self.on_joint_state, 10)
+            self.latest_robot_state_raw: StandControlState | None = None
+            self.latest_leg_length_rate_debug: ControlLoopDebug | None = None
+            self.create_subscription(
+                JointState, "/joint_states", self.on_joint_state_filtered, 10
+            )
+            self.create_subscription(
+                JointState, "/joint_states_raw", self.on_joint_state_raw, 10
+            )
             self.create_subscription(Imu, "/imu", self.on_imu, 10)
             self.create_subscription(
                 UInt32MultiArray, "/stm32_bridge/counters", self.on_counters, 10
             )
             self.create_subscription(
+                StandControlState, "/robot_state_raw", self.on_robot_state_raw, 10
+            )
+            self.create_subscription(
                 StandControlState, "/robot_state", self.on_robot_state, 10
             )
+            self.create_subscription(
+                ControlLoopDebug,
+                "/stm32_bridge/debug/leg_length_rate",
+                self.on_leg_length_rate_debug,
+                10,
+            )
 
-        def on_joint_state(self, msg: JointState) -> None:
-            self.latest_joint_state = msg
+        def on_joint_state_filtered(self, msg: JointState) -> None:
+            self.latest_joint_state_filtered = msg
+
+        def on_joint_state_raw(self, msg: JointState) -> None:
+            self.latest_joint_state_raw = msg
 
         def on_imu(self, msg: Imu) -> None:
             self.latest_imu = msg
@@ -961,8 +1076,18 @@ def capture_from_ros(args: argparse.Namespace) -> list[CaptureRow]:
         def on_counters(self, msg: UInt32MultiArray) -> None:
             self.latest_counters = msg
 
+        def on_robot_state_raw(self, msg: StandControlState) -> None:
+            self.latest_robot_state_raw = msg
+
+        def on_leg_length_rate_debug(self, msg: ControlLoopDebug) -> None:
+            self.latest_leg_length_rate_debug = msg
+
         def on_robot_state(self, msg: StandControlState) -> None:
-            if self.latest_joint_state is None:
+            if (
+                self.latest_joint_state_filtered is None
+                or self.latest_joint_state_raw is None
+                or self.latest_robot_state_raw is None
+            ):
                 return
             host_time_sec = time.time()
             if self.first_host_time_sec is None:
@@ -970,9 +1095,12 @@ def capture_from_ros(args: argparse.Namespace) -> list[CaptureRow]:
             self.rows.append(
                 build_row_from_ros(
                     msg,
-                    self.latest_joint_state,
+                    self.latest_robot_state_raw,
+                    self.latest_joint_state_filtered,
+                    self.latest_joint_state_raw,
                     self.latest_imu,
                     self.latest_counters,
+                    self.latest_leg_length_rate_debug,
                     host_time_sec,
                     self.first_host_time_sec,
                 )
@@ -1045,7 +1173,11 @@ def main() -> None:
     if args.source == "serial":
         print(f"Serial config: port={args.port} baud={args.baud}")
     else:
-        print("ROS topics: /robot_state, /joint_states, /imu, /stm32_bridge/counters")
+        print(
+            "ROS topics: /robot_state, /robot_state_raw, /joint_states, "
+            "/joint_states_raw, /stm32_bridge/debug/leg_length_rate, /imu, "
+            "/stm32_bridge/counters"
+        )
     print(f"Output prefix: {output_dir / args.prefix}")
 
     if args.source == "ros":

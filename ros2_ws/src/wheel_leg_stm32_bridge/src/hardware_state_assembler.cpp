@@ -17,8 +17,11 @@ double NormalizeAngleDelta(double angle_delta) {
 HardwareLegKinematics ComputeHardwareLegKinematics(
     double hip_absolute,
     double calf_absolute,
+    double previous_leg_length,
     double previous_phi,
+    double filtered_length_rate,
     double filtered_phi_rate,
+    bool has_previous_leg_length,
     bool has_previous_phi,
     double dt,
     const HardwareStateAssemblerConfig& config) {
@@ -38,12 +41,24 @@ HardwareLegKinematics ComputeHardwareLegKinematics(
   output.phi = std::atan2(y_clockwise, x);
 
   if (dt <= 0.0 || !has_previous_phi) {
-    output.phi_rate = 0.0;
+    output.phi_rate.raw = 0.0;
+    output.phi_rate.filtered = 0.0;
   } else {
-    const double raw_phi_rate =
+    output.phi_rate.raw =
         NormalizeAngleDelta(output.phi - previous_phi) / dt;
-    output.phi_rate = config.phi_rate_low_pass_alpha * filtered_phi_rate +
-                      (1.0 - config.phi_rate_low_pass_alpha) * raw_phi_rate;
+    output.phi_rate.filtered =
+        config.phi_rate_low_pass_alpha * filtered_phi_rate +
+        (1.0 - config.phi_rate_low_pass_alpha) * output.phi_rate.raw;
+  }
+
+  if (dt <= 0.0 || !has_previous_leg_length) {
+    output.length_rate.raw = 0.0;
+    output.length_rate.filtered = 0.0;
+  } else {
+    output.length_rate.raw = (output.leg_length - previous_leg_length) / dt;
+    output.length_rate.filtered =
+        config.length_rate_low_pass_alpha * filtered_length_rate +
+        (1.0 - config.length_rate_low_pass_alpha) * output.length_rate.raw;
   }
 
   return output;
@@ -59,28 +74,50 @@ HardwareStateAssemblyOutput AssembleHardwareState(
     return output;
   }
 
-  output.body_velocity =
+  output.body_velocity.raw =
       0.5 * (input.joint_velocity[2] + input.joint_velocity[5]) *
       config.wheel_radius;
-  if (dt > 0.0) {
-    state->body_distance += output.body_velocity * dt;
+  if (dt <= 0.0 || !state->has_previous_body_velocity) {
+    output.body_velocity.filtered = output.body_velocity.raw;
+  } else {
+    output.body_velocity.filtered =
+        config.body_velocity_low_pass_alpha * state->filtered_body_velocity +
+        (1.0 - config.body_velocity_low_pass_alpha) * output.body_velocity.raw;
   }
-  output.body_distance = state->body_distance;
+  state->filtered_body_velocity = output.body_velocity.filtered;
+  state->has_previous_body_velocity = true;
+
+  if (dt > 0.0) {
+    state->raw_body_distance += output.body_velocity.raw * dt;
+    state->filtered_body_distance += output.body_velocity.filtered * dt;
+  }
+  output.body_distance.raw = state->raw_body_distance;
+  output.body_distance.filtered = state->filtered_body_distance;
 
   output.left_leg = ComputeHardwareLegKinematics(
       input.joint_position[0], input.joint_position[1],
-      state->previous_left_phi, state->filtered_left_phi_rate,
-      state->has_previous_left_phi, dt, config);
+      state->previous_left_leg_length, state->previous_left_phi,
+      state->filtered_left_length_rate, state->filtered_left_phi_rate,
+      state->has_previous_left_leg_length, state->has_previous_left_phi, dt,
+      config);
+  state->previous_left_leg_length = output.left_leg.leg_length;
   state->previous_left_phi = output.left_leg.phi;
-  state->filtered_left_phi_rate = output.left_leg.phi_rate;
+  state->filtered_left_length_rate = output.left_leg.length_rate.filtered;
+  state->filtered_left_phi_rate = output.left_leg.phi_rate.filtered;
+  state->has_previous_left_leg_length = true;
   state->has_previous_left_phi = true;
 
   output.right_leg = ComputeHardwareLegKinematics(
       input.joint_position[3], input.joint_position[4],
-      state->previous_right_phi, state->filtered_right_phi_rate,
-      state->has_previous_right_phi, dt, config);
+      state->previous_right_leg_length, state->previous_right_phi,
+      state->filtered_right_length_rate, state->filtered_right_phi_rate,
+      state->has_previous_right_leg_length, state->has_previous_right_phi, dt,
+      config);
+  state->previous_right_leg_length = output.right_leg.leg_length;
   state->previous_right_phi = output.right_leg.phi;
-  state->filtered_right_phi_rate = output.right_leg.phi_rate;
+  state->filtered_right_length_rate = output.right_leg.length_rate.filtered;
+  state->filtered_right_phi_rate = output.right_leg.phi_rate.filtered;
+  state->has_previous_right_leg_length = true;
   state->has_previous_right_phi = true;
 
   return output;

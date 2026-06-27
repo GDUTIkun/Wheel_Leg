@@ -28,6 +28,7 @@
 #include "wheel_leg_bridge/message_conversions.hpp"
 #include "wheel_leg_hw/interface_contract.hpp"
 #include "wheel_leg_stm32_bridge/hardware_state_assembler.hpp"
+#include "wheel_leg_msgs/msg/control_loop_debug.hpp"
 #include "wheel_leg_msgs/msg/joint_command.hpp"
 #include "wheel_leg_msgs/msg/rc_status.hpp"
 #include "wheel_leg_msgs/msg/stand_control_state.hpp"
@@ -319,6 +320,18 @@ class Stm32BridgeNode : public rclcpp::Node {
     publish_imu_ = declare_parameter<bool>("publish_imu", true);
     publish_joint_states_ =
         declare_parameter<bool>("publish_joint_states", true);
+    hip_velocity_low_pass_alpha_ =
+        declare_parameter<double>("hip_velocity_low_pass_alpha", 0.57);
+    knee_velocity_low_pass_alpha_ =
+        declare_parameter<double>("knee_velocity_low_pass_alpha", 0.62);
+    wheel_velocity_low_pass_alpha_ =
+        declare_parameter<double>("wheel_velocity_low_pass_alpha", 0.73);
+    hardware_state_config_.phi_rate_low_pass_alpha =
+        declare_parameter<double>("phi_rate_low_pass_alpha", 0.57);
+    hardware_state_config_.length_rate_low_pass_alpha =
+        declare_parameter<double>("length_rate_low_pass_alpha", 0.73);
+    hardware_state_config_.body_velocity_low_pass_alpha =
+        declare_parameter<double>("body_velocity_low_pass_alpha", 0.73);
     status_period_sec_ = declare_parameter<double>("status_period_sec", 0.5);
     joint_limit_protection_.effort_threshold_nm =
         declare_parameter<double>("joint_limit_protection.effort_threshold_nm", 3.0);
@@ -353,10 +366,22 @@ class Stm32BridgeNode : public rclcpp::Node {
 
     robot_state_pub_ = create_publisher<wheel_leg_msgs::msg::StandControlState>(
         "/robot_state", rclcpp::SystemDefaultsQoS());
+    robot_state_raw_pub_ =
+        create_publisher<wheel_leg_msgs::msg::StandControlState>(
+            "/robot_state_raw", rclcpp::SystemDefaultsQoS());
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>(
         "/imu", rclcpp::SystemDefaultsQoS());
     joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         "/joint_states", rclcpp::SystemDefaultsQoS());
+    joint_state_raw_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+        "/joint_states_raw", rclcpp::SystemDefaultsQoS());
+    phi_rate_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/stm32_bridge/debug/phi_rate", rclcpp::SystemDefaultsQoS());
+    leg_length_rate_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/stm32_bridge/debug/leg_length_rate",
+            rclcpp::SystemDefaultsQoS());
     status_text_pub_ = create_publisher<std_msgs::msg::String>(
         "/stm32_bridge/status_text", 10);
     counters_pub_ = create_publisher<std_msgs::msg::UInt32MultiArray>(
@@ -412,6 +437,40 @@ class Stm32BridgeNode : public rclcpp::Node {
   }
 
  private:
+  double VelocityFilterAlphaForJoint(std::size_t joint_index) const {
+    switch (joint_index) {
+      case 0:
+      case 3:
+        return hip_velocity_low_pass_alpha_;
+      case 1:
+      case 4:
+        return knee_velocity_low_pass_alpha_;
+      case 2:
+      case 5:
+        return wheel_velocity_low_pass_alpha_;
+      default:
+        return 0.0;
+    }
+  }
+
+  double FilterJointVelocity(std::size_t joint_index, double raw_velocity) {
+    if (joint_index >= filtered_joint_velocities_.size()) {
+      return raw_velocity;
+    }
+
+    const double alpha = VelocityFilterAlphaForJoint(joint_index);
+    if (!has_filtered_joint_velocities_[joint_index]) {
+      filtered_joint_velocities_[joint_index] = raw_velocity;
+      has_filtered_joint_velocities_[joint_index] = true;
+      return raw_velocity;
+    }
+
+    filtered_joint_velocities_[joint_index] =
+        alpha * filtered_joint_velocities_[joint_index] +
+        (1.0 - alpha) * raw_velocity;
+    return filtered_joint_velocities_[joint_index];
+  }
+
   bool OpenSerialPort() {
     const speed_t baud = ToTermiosBaudRate(baud_rate_);
     if (baud == 0) {
@@ -716,11 +775,14 @@ class Stm32BridgeNode : public rclcpp::Node {
 
     const rclcpp::Time stamp = now();
     wheel_leg_common::JointStateSample joint_sample;
+    wheel_leg_common::JointStateSample filtered_joint_sample;
     const int64_t stamp_ns = stamp.nanoseconds();
     joint_sample.stamp.sec = static_cast<int32_t>(stamp_ns / 1000000000LL);
     joint_sample.stamp.nanosec =
         static_cast<uint32_t>(stamp_ns % 1000000000LL);
+    filtered_joint_sample.stamp = joint_sample.stamp;
     joint_sample.joints.reserve(kJointCount);
+    filtered_joint_sample.joints.reserve(kJointCount);
     for (std::size_t i = 0; i < kJointCount; ++i) {
       wheel_leg_common::JointSample joint;
       joint.name = std::string(wheel_leg_hw::kCanonicalJointNames[i]);
@@ -728,6 +790,11 @@ class Stm32BridgeNode : public rclcpp::Node {
       joint.velocity = decoded.joint_velocity[i];
       joint.effort = decoded.joint_effort[i];
       joint_sample.joints.push_back(joint);
+
+      wheel_leg_common::JointSample filtered_joint = joint;
+      filtered_joint.velocity =
+          FilterJointVelocity(i, static_cast<double>(decoded.joint_velocity[i]));
+      filtered_joint_sample.joints.push_back(filtered_joint);
     }
 
     wheel_leg_common::ImuSample imu_sample;
@@ -756,14 +823,19 @@ class Stm32BridgeNode : public rclcpp::Node {
       cache_.have_state = true;
     }
 
-    auto joint_state_msg = wheel_leg_bridge::ToRosJointState(joint_sample);
+    auto joint_state_raw_msg = wheel_leg_bridge::ToRosJointState(joint_sample);
+    joint_state_raw_msg.header.stamp = stamp;
+    auto joint_state_msg =
+        wheel_leg_bridge::ToRosJointState(filtered_joint_sample);
     joint_state_msg.header.stamp = stamp;
     auto imu_msg = wheel_leg_bridge::ToRosImu(imu_sample);
     imu_msg.header.stamp = stamp;
 
     wheel_leg_msgs::msg::StandControlState robot_state_msg;
+    wheel_leg_msgs::msg::StandControlState robot_state_raw_msg;
     robot_state_msg.header.stamp = stamp;
     robot_state_msg.header.frame_id = std::string(wheel_leg_hw::kImuFrame);
+    robot_state_raw_msg.header = robot_state_msg.header;
 
     HardwareStateAssemblyInput hardware_input;
     for (std::size_t i = 0; i < kJointCount; ++i) {
@@ -775,10 +847,11 @@ class Stm32BridgeNode : public rclcpp::Node {
     {
       std::scoped_lock lock(cache_mutex_);
       hardware_state =
-          AssembleHardwareState(hardware_input, dt, &cache_.hardware_state);
+          AssembleHardwareState(
+              hardware_input, dt, &cache_.hardware_state, hardware_state_config_);
     }
-    robot_state_msg.body_distance = hardware_state.body_distance;
-    robot_state_msg.body_velocity = hardware_state.body_velocity;
+    robot_state_msg.body_distance = hardware_state.body_distance.filtered;
+    robot_state_msg.body_velocity = hardware_state.body_velocity.filtered;
     robot_state_msg.body_roll = decoded.roll;
     robot_state_msg.body_roll_rate = decoded.gyro_x;
     robot_state_msg.body_pitch = decoded.pitch;
@@ -789,20 +862,65 @@ class Stm32BridgeNode : public rclcpp::Node {
     robot_state_msg.left_calf_absolute = hardware_state.left_leg.calf_absolute;
     robot_state_msg.left_leg_length = hardware_state.left_leg.leg_length;
     robot_state_msg.left_phi = hardware_state.left_leg.phi;
-    robot_state_msg.left_phi_rate = hardware_state.left_leg.phi_rate;
+    robot_state_msg.left_phi_rate = hardware_state.left_leg.phi_rate.filtered;
     robot_state_msg.right_hip_absolute = hardware_state.right_leg.hip_absolute;
-    robot_state_msg.right_calf_absolute = hardware_state.right_leg.calf_absolute;
+    robot_state_msg.right_calf_absolute =
+        hardware_state.right_leg.calf_absolute;
     robot_state_msg.right_leg_length = hardware_state.right_leg.leg_length;
     robot_state_msg.right_phi = hardware_state.right_leg.phi;
-    robot_state_msg.right_phi_rate = hardware_state.right_leg.phi_rate;
+    robot_state_msg.right_phi_rate = hardware_state.right_leg.phi_rate.filtered;
+
+    robot_state_raw_msg.body_distance = hardware_state.body_distance.raw;
+    robot_state_raw_msg.body_velocity = hardware_state.body_velocity.raw;
+    robot_state_raw_msg.body_roll = decoded.roll;
+    robot_state_raw_msg.body_roll_rate = decoded.gyro_x;
+    robot_state_raw_msg.body_pitch = decoded.pitch;
+    robot_state_raw_msg.body_pitch_rate = decoded.gyro_y;
+    robot_state_raw_msg.body_yaw_rate = decoded.gyro_z;
+    robot_state_raw_msg.left_hip_absolute = hardware_state.left_leg.hip_absolute;
+    robot_state_raw_msg.left_calf_absolute =
+        hardware_state.left_leg.calf_absolute;
+    robot_state_raw_msg.left_leg_length = hardware_state.left_leg.leg_length;
+    robot_state_raw_msg.left_phi = hardware_state.left_leg.phi;
+    robot_state_raw_msg.left_phi_rate = hardware_state.left_leg.phi_rate.raw;
+    robot_state_raw_msg.right_hip_absolute =
+        hardware_state.right_leg.hip_absolute;
+    robot_state_raw_msg.right_calf_absolute =
+        hardware_state.right_leg.calf_absolute;
+    robot_state_raw_msg.right_leg_length = hardware_state.right_leg.leg_length;
+    robot_state_raw_msg.right_phi = hardware_state.right_leg.phi;
+    robot_state_raw_msg.right_phi_rate = hardware_state.right_leg.phi_rate.raw;
 
     robot_state_pub_->publish(robot_state_msg);
+    robot_state_raw_pub_->publish(robot_state_raw_msg);
     if (publish_imu_) {
       imu_pub_->publish(imu_msg);
     }
     if (publish_joint_states_) {
+      joint_state_raw_pub_->publish(joint_state_raw_msg);
       joint_state_pub_->publish(joint_state_msg);
     }
+
+    wheel_leg_msgs::msg::ControlLoopDebug phi_rate_msg;
+    phi_rate_msg.header.stamp = stamp;
+    phi_rate_msg.loop_name = "stm32_bridge_phi_rate";
+    phi_rate_msg.ref_primary = hardware_state.left_leg.phi_rate.raw;
+    phi_rate_msg.now_primary = hardware_state.left_leg.phi_rate.filtered;
+    phi_rate_msg.ref_secondary = hardware_state.right_leg.phi_rate.raw;
+    phi_rate_msg.now_secondary = hardware_state.right_leg.phi_rate.filtered;
+    phi_rate_debug_pub_->publish(phi_rate_msg);
+
+    wheel_leg_msgs::msg::ControlLoopDebug leg_length_rate_msg;
+    leg_length_rate_msg.header.stamp = stamp;
+    leg_length_rate_msg.loop_name = "stm32_bridge_leg_length_rate";
+    leg_length_rate_msg.ref_primary = hardware_state.left_leg.length_rate.raw;
+    leg_length_rate_msg.now_primary =
+        hardware_state.left_leg.length_rate.filtered;
+    leg_length_rate_msg.ref_secondary =
+        hardware_state.right_leg.length_rate.raw;
+    leg_length_rate_msg.now_secondary =
+        hardware_state.right_leg.length_rate.filtered;
+    leg_length_rate_debug_pub_->publish(leg_length_rate_msg);
   }
 
   void HandleJointCommand(const wheel_leg_msgs::msg::JointCommand& msg) {
@@ -978,8 +1096,12 @@ class Stm32BridgeNode : public rclcpp::Node {
   bool command_enable_ = false;
   bool publish_imu_ = true;
   bool publish_joint_states_ = true;
+  double hip_velocity_low_pass_alpha_ = 0.57;
+  double knee_velocity_low_pass_alpha_ = 0.62;
+  double wheel_velocity_low_pass_alpha_ = 0.73;
   double status_period_sec_ = 0.0;
   JointLimitProtectionConfig joint_limit_protection_;
+  HardwareStateAssemblerConfig hardware_state_config_;
   int serial_fd_ = -1;
   std::atomic<bool> running_{false};
   std::thread reader_thread_;
@@ -993,6 +1115,8 @@ class Stm32BridgeNode : public rclcpp::Node {
   uint16_t tx_seq_ = 0;
   rclcpp::Time last_command_time_{0, 0, RCL_ROS_TIME};
   std::array<float, kJointCount> last_commanded_efforts_ {};
+  std::array<double, kJointCount> filtered_joint_velocities_ {};
+  std::array<bool, kJointCount> has_filtered_joint_velocities_ {};
   std::mutex rc_status_mutex_;
   wheel_leg_msgs::msg::RcStatus latest_rc_status_;
   bool have_rc_status_ = false;
@@ -1001,8 +1125,16 @@ class Stm32BridgeNode : public rclcpp::Node {
 
   rclcpp::Publisher<wheel_leg_msgs::msg::StandControlState>::SharedPtr
       robot_state_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::StandControlState>::SharedPtr
+      robot_state_raw_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr
+      joint_state_raw_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      phi_rate_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      leg_length_rate_debug_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_text_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr counters_pub_;
   rclcpp::Subscription<wheel_leg_msgs::msg::JointCommand>::SharedPtr
