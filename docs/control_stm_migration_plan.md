@@ -57,6 +57,10 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 | `enable_wheel_output` | 允许发布左右轮力矩 | `false` |
 | `enable_hip_output` | 允许发布左右髋力矩 | `false` |
 | `enable_knee_output` | 允许发布左右膝力矩 | `false` |
+| `target_leg_length_min` | 实物侧腿长目标下限，单位 m | `0.15` |
+| `target_leg_length_max` | 实物侧腿长目标上限，单位 m | `0.32` |
+| `target_phi_min_deg` | 实物侧腿角目标下限，单位 deg | `30.0` |
+| `target_phi_max_deg` | 实物侧腿角目标上限，单位 deg | `150.0` |
 
 运行时可用 `ros2 param set /wheel_leg_controller <参数名> true/false` 逐段切换。
 

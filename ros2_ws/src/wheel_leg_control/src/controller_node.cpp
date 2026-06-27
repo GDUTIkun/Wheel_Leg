@@ -226,6 +226,10 @@ class ControllerNode : public rclcpp::Node {
         declare_parameter<double>("target_leg_length_max", 0.33);
     target_phi_deg_ =
         declare_parameter<double>("target_phi_deg", 97.1);
+    target_phi_min_deg_ =
+        declare_parameter<double>("target_phi_min_deg", 30.0);
+    target_phi_max_deg_ =
+        declare_parameter<double>("target_phi_max_deg", 150.0);
     target_pitch_deg_ =
         declare_parameter<double>("target_pitch_deg", 0.0);
     velocity_ref_lpf_rc_ =
@@ -263,6 +267,8 @@ class ControllerNode : public rclcpp::Node {
         get_logger(),
         "Parameter publish_rate_hz is ignored; /wheel_leg_controller now runs one control step per new /robot_state sample.");
 
+    target_phi_deg_ =
+        std::clamp(target_phi_deg_, target_phi_min_deg_, target_phi_max_deg_);
     default_targets_.target_phi = DegreesToRadiansLocal(target_phi_deg_);
     default_targets_.target_pitch = DegreesToRadiansLocal(target_pitch_deg_);
     latest_control_mode_ = kModeStand;
@@ -383,6 +389,8 @@ class ControllerNode : public rclcpp::Node {
     result.successful = true;
 
     double next_target_phi_deg = target_phi_deg_;
+    double next_target_phi_min_deg = target_phi_min_deg_;
+    double next_target_phi_max_deg = target_phi_max_deg_;
     double next_target_pitch_deg = target_pitch_deg_;
     double next_velocity_ref_lpf_rc = velocity_ref_lpf_rc_;
     double next_velocity_ref_slew_rate = velocity_ref_slew_rate_;
@@ -447,6 +455,26 @@ class ControllerNode : public rclcpp::Node {
         if (!std::isfinite(next_target_phi_deg)) {
           result.successful = false;
           result.reason = "target_phi_deg must be finite";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "target_phi_min_deg") {
+        next_target_phi_min_deg = parameter.as_double();
+        if (!std::isfinite(next_target_phi_min_deg)) {
+          result.successful = false;
+          result.reason = "target_phi_min_deg must be finite";
+          return result;
+        }
+        continue;
+      }
+
+      if (parameter.get_name() == "target_phi_max_deg") {
+        next_target_phi_max_deg = parameter.as_double();
+        if (!std::isfinite(next_target_phi_max_deg)) {
+          result.successful = false;
+          result.reason = "target_phi_max_deg must be finite";
           return result;
         }
         continue;
@@ -568,7 +596,16 @@ class ControllerNode : public rclcpp::Node {
       }
     }
 
-    target_phi_deg_ = next_target_phi_deg;
+    if (next_target_phi_min_deg > next_target_phi_max_deg) {
+      result.successful = false;
+      result.reason = "target_phi_min_deg must be <= target_phi_max_deg";
+      return result;
+    }
+
+    target_phi_min_deg_ = next_target_phi_min_deg;
+    target_phi_max_deg_ = next_target_phi_max_deg;
+    target_phi_deg_ = std::clamp(
+        next_target_phi_deg, target_phi_min_deg_, target_phi_max_deg_);
     target_pitch_deg_ = next_target_pitch_deg;
     default_targets_.target_phi = DegreesToRadiansLocal(target_phi_deg_);
     default_targets_.target_pitch = DegreesToRadiansLocal(target_pitch_deg_);
@@ -1502,6 +1539,8 @@ class ControllerNode : public rclcpp::Node {
   double target_leg_length_min_ = 0.0;
   double target_leg_length_max_ = 0.0;
   double target_phi_deg_ = 97.1;
+  double target_phi_min_deg_ = 30.0;
+  double target_phi_max_deg_ = 150.0;
   double target_pitch_deg_ = 0.0;
   double velocity_ref_lpf_rc_ = 0.0;
   double velocity_ref_slew_rate_ = 0.0;

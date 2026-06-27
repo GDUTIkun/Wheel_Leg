@@ -38,12 +38,12 @@ wheel_leg_controller
 
 ## 3. 通信周期与链路
 
-第一版控制闭环周期按 `100Hz` 规划，但 STM32 到 ROS 的状态上报频率需要单独测试确认：
+第一版控制闭环最初按 `100Hz` 规划，但随着 STM32 上行稳定到 `200Hz`，当前硬件主线已经转为 `200Hz` 控制口径：
 
-- ROS 侧控制器按 `100Hz` 消费状态并发布 `/joint_command`。
+- ROS 侧控制器当前按 `200Hz` 口径消费状态并发布 `/joint_command`。
 - ROS 到 STM32 的命令帧按最新 `/joint_command` 下发。
 - STM32 必须基于命令超时进入安全输出，不依赖 ROS 主动发送停机帧。
-- STM32 可以以高于 `100Hz` 的频率发送状态帧，让 ROS 侧获得更密的传感器观测。
+- STM32 以 `200Hz` 频率发送状态帧，ROS 侧按每帧驱动 `/robot_state`。
 - 当前实测 STM32 读完一次传感器约在 `3ms` 以内，因此优先测试 `200Hz` 状态上报。
 - 最终状态上报频率由 STM32 传感器读取耗时、串口带宽、解包开销、丢包率和控制链稳定性共同决定。
 
@@ -751,7 +751,7 @@ STM32 侧本轮已完成的代码改动：
 - 尚未完成正式 `type=0x81` 新 payload 与 ROS bridge 的上板联调。
 - 尚未完成 `RC ch7 -> bridge -> command estop -> STM32 safety_state` 的整链硬件验证。
 - 尚未完成六电机方向、单位、限幅和斜率限制的悬空验证。
-- 尚未完成 `/robot_state` 新来源下的 100Hz 实机闭环联调。
+- 尚未完成 `/robot_state` 新来源下的 200Hz 实机闭环联调。
 
 因此当前阶段状态应理解为：
 
@@ -927,4 +927,4 @@ uart2 rx_ok=0 rx_crc=0 rx_gap=0 tx=1999 tx_err=0 busy=0 to=0 herr=0 abort_rx=0 t
 
 - ROS 侧 `wheel_leg_stm32_bridge` 接收稳定性验证
 - ROS 下行 `/joint_command -> STM32` 接收链路验证
-- 在 `200Hz` 上行、`100Hz` 控制闭环条件下的整链联调
+- 在 `200Hz` 上行、`200Hz` 控制闭环条件下的整链联调
