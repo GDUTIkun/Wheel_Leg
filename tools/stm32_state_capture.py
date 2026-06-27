@@ -27,6 +27,7 @@ L2 = 0.225
 
 PLOT_GROUP_ALIASES = {
     "all": [
+        "body_state",
         "imu_euler",
         "gyro",
         "accel",
@@ -38,6 +39,7 @@ PLOT_GROUP_ALIASES = {
         "status",
     ],
     "all_robot_states": [
+        "body_state",
         "imu_euler",
         "gyro",
         "accel",
@@ -54,6 +56,7 @@ PLOT_GROUP_CHOICES = sorted(
     {
         "all",
         "all_robot_states",
+        "body_state",
         "imu_euler",
         "gyro",
         "accel",
@@ -166,6 +169,13 @@ class CaptureRow:
     elapsed_sec: float
     stm_tick_ms: int
     stm_time_sec: float
+    body_distance: float
+    body_velocity: float
+    body_roll: float
+    body_roll_rate: float
+    body_pitch: float
+    body_pitch_rate: float
+    body_yaw_rate: float
     roll: float
     pitch: float
     yaw: float
@@ -193,8 +203,12 @@ class CaptureRow:
     right_hip_effort: float
     right_knee_effort: float
     right_wheel_effort: float
+    left_hip_absolute: float
+    left_calf_absolute: float
     left_leg_length: float
     right_leg_length: float
+    right_hip_absolute: float
+    right_calf_absolute: float
     left_phi: float
     right_phi: float
     left_phi_rate_raw: float
@@ -422,6 +436,13 @@ def build_row(
         elapsed_sec=host_time_sec - first_host_time_sec,
         stm_tick_ms=frame.stm_tick_ms,
         stm_time_sec=frame.stm_tick_ms * 1e-3,
+        body_distance=math.nan,
+        body_velocity=math.nan,
+        body_roll=frame.roll,
+        body_roll_rate=frame.gyro_x,
+        body_pitch=frame.pitch,
+        body_pitch_rate=frame.gyro_y,
+        body_yaw_rate=frame.gyro_z,
         roll=frame.roll,
         pitch=frame.pitch,
         yaw=frame.yaw,
@@ -449,8 +470,12 @@ def build_row(
         right_hip_effort=frame.joint_effort[3],
         right_knee_effort=frame.joint_effort[4],
         right_wheel_effort=frame.joint_effort[5],
+        left_hip_absolute=frame.joint_position[0],
+        left_calf_absolute=frame.joint_position[1],
         left_leg_length=left_leg_length,
         right_leg_length=right_leg_length,
+        right_hip_absolute=frame.joint_position[3],
+        right_calf_absolute=frame.joint_position[4],
         left_phi=left_phi,
         right_phi=right_phi,
         left_phi_rate_raw=left_phi_rate_raw,
@@ -550,7 +575,17 @@ def plot_rows(rows: list[CaptureRow], path: Path, plot_groups: list[str]) -> Non
         axes = [axes]
 
     for axis, group in zip(axes, plot_groups):
-        if group == "imu_euler":
+        if group == "body_state":
+            axis.plot(t, [row.body_distance for row in rows], label="body_distance")
+            axis.plot(t, [row.body_velocity for row in rows], label="body_velocity")
+            axis.plot(t, [math.degrees(row.body_roll) for row in rows], label="body_roll_deg")
+            axis.plot(t, [math.degrees(row.body_pitch) for row in rows], label="body_pitch_deg")
+            axis.plot(t, [row.body_roll_rate for row in rows], label="body_roll_rate")
+            axis.plot(t, [row.body_pitch_rate for row in rows], label="body_pitch_rate")
+            axis.plot(t, [row.body_yaw_rate for row in rows], label="body_yaw_rate")
+            axis.set_ylabel("mixed")
+            axis.set_title("Body State (/robot_state)")
+        elif group == "imu_euler":
             axis.plot(t, [math.degrees(row.roll) for row in rows], label="roll")
             axis.plot(t, [math.degrees(row.pitch) for row in rows], label="pitch")
             axis.plot(t, [math.degrees(row.yaw) for row in rows], label="yaw")
@@ -684,6 +719,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", default="/dev/ttyAMA4", help="Serial port.")
     parser.add_argument("--baud", type=int, default=921600, help="Serial baud rate.")
     parser.add_argument(
+        "--source",
+        default="ros",
+        choices=("ros", "serial"),
+        help="Capture source. Use 'ros' when the STM32 bridge is already running.",
+    )
+    parser.add_argument(
         "--duration",
         type=float,
         default=10.0,
@@ -723,31 +764,236 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    if args.duration <= 0.0:
-        raise SystemExit("--duration must be positive")
-    if not 0.0 <= args.phi_rate_lpf_alpha < 1.0:
-        raise SystemExit("--phi-rate-lpf-alpha must be in [0, 1)")
-    if not 0.0 <= args.length_rate_lpf_alpha < 1.0:
-        raise SystemExit("--length-rate-lpf-alpha must be in [0, 1)")
-    plot_groups = expand_plot_groups(args.plot_groups)
+def build_row_from_ros(
+    robot_state,
+    joint_state,
+    imu_msg,
+    counters,
+    host_time_sec: float,
+    first_host_time_sec: float,
+) -> CaptureRow:
+    joint_index = {name: index for index, name in enumerate(joint_state.name)}
 
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = output_dir / f"{args.prefix}.csv"
-    plot_path = output_dir / f"{args.prefix}.png"
-    summary_path = output_dir / f"{args.prefix}.summary.txt"
+    def get_joint_value(values: list[float], name: str) -> float:
+        index = joint_index.get(name)
+        if index is None or index >= len(values):
+            return math.nan
+        return float(values[index])
 
+    def quat_to_yaw(quat) -> float:
+        siny_cosp = 2.0 * (quat.w * quat.z + quat.x * quat.y)
+        cosy_cosp = 1.0 - 2.0 * (quat.y * quat.y + quat.z * quat.z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    counter_values = list(counters.data) if counters is not None else []
+
+    stamp = robot_state.header.stamp
+    stm_time_sec = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+    stm_tick_ms = int(round(stm_time_sec * 1000.0))
+    yaw = quat_to_yaw(imu_msg.orientation) if imu_msg is not None else math.nan
+
+    return CaptureRow(
+        host_time_sec=host_time_sec,
+        elapsed_sec=host_time_sec - first_host_time_sec,
+        stm_tick_ms=stm_tick_ms,
+        stm_time_sec=stm_time_sec,
+        body_distance=float(robot_state.body_distance),
+        body_velocity=float(robot_state.body_velocity),
+        body_roll=float(robot_state.body_roll),
+        body_roll_rate=float(robot_state.body_roll_rate),
+        body_pitch=float(robot_state.body_pitch),
+        body_pitch_rate=float(robot_state.body_pitch_rate),
+        body_yaw_rate=float(robot_state.body_yaw_rate),
+        roll=float(robot_state.body_roll),
+        pitch=float(robot_state.body_pitch),
+        yaw=float(yaw),
+        gyro_x=float(imu_msg.angular_velocity.x) if imu_msg is not None else float(robot_state.body_roll_rate),
+        gyro_y=float(imu_msg.angular_velocity.y) if imu_msg is not None else float(robot_state.body_pitch_rate),
+        gyro_z=float(imu_msg.angular_velocity.z) if imu_msg is not None else float(robot_state.body_yaw_rate),
+        acc_x=float(imu_msg.linear_acceleration.x) if imu_msg is not None else math.nan,
+        acc_y=float(imu_msg.linear_acceleration.y) if imu_msg is not None else math.nan,
+        acc_z=float(imu_msg.linear_acceleration.z) if imu_msg is not None else math.nan,
+        left_hip_pos=get_joint_value(joint_state.position, "left_hip"),
+        left_knee_pos=get_joint_value(joint_state.position, "left_knee"),
+        left_wheel_pos=get_joint_value(joint_state.position, "left_wheel"),
+        right_hip_pos=get_joint_value(joint_state.position, "right_hip"),
+        right_knee_pos=get_joint_value(joint_state.position, "right_knee"),
+        right_wheel_pos=get_joint_value(joint_state.position, "right_wheel"),
+        left_hip_vel=get_joint_value(joint_state.velocity, "left_hip"),
+        left_knee_vel=get_joint_value(joint_state.velocity, "left_knee"),
+        left_wheel_vel=get_joint_value(joint_state.velocity, "left_wheel"),
+        right_hip_vel=get_joint_value(joint_state.velocity, "right_hip"),
+        right_knee_vel=get_joint_value(joint_state.velocity, "right_knee"),
+        right_wheel_vel=get_joint_value(joint_state.velocity, "right_wheel"),
+        left_hip_effort=get_joint_value(joint_state.effort, "left_hip"),
+        left_knee_effort=get_joint_value(joint_state.effort, "left_knee"),
+        left_wheel_effort=get_joint_value(joint_state.effort, "left_wheel"),
+        right_hip_effort=get_joint_value(joint_state.effort, "right_hip"),
+        right_knee_effort=get_joint_value(joint_state.effort, "right_knee"),
+        right_wheel_effort=get_joint_value(joint_state.effort, "right_wheel"),
+        left_hip_absolute=float(robot_state.left_hip_absolute),
+        left_calf_absolute=float(robot_state.left_calf_absolute),
+        left_leg_length=float(robot_state.left_leg_length),
+        right_leg_length=float(robot_state.right_leg_length),
+        right_hip_absolute=float(robot_state.right_hip_absolute),
+        right_calf_absolute=float(robot_state.right_calf_absolute),
+        left_phi=float(robot_state.left_phi),
+        right_phi=float(robot_state.right_phi),
+        left_phi_rate_raw=float(robot_state.left_phi_rate),
+        right_phi_rate_raw=float(robot_state.right_phi_rate),
+        left_phi_rate_lpf=float(robot_state.left_phi_rate),
+        right_phi_rate_lpf=float(robot_state.right_phi_rate),
+        left_length_rate_raw=math.nan,
+        right_length_rate_raw=math.nan,
+        left_length_rate_lpf=math.nan,
+        right_length_rate_lpf=math.nan,
+        online_mask=-1,
+        safety_state=-1,
+        last_command_timeout=-1,
+        knee_limit_flag=-1,
+        comm_rx_error_count=int(counter_values[0]) if len(counter_values) > 0 else -1,
+        comm_crc_error_count=int(counter_values[1]) if len(counter_values) > 1 else -1,
+        can_error_count=-1,
+    )
+
+
+def recompute_leg_rate_columns(
+    rows: list[CaptureRow],
+    phi_rate_lpf_alpha: float,
+    length_rate_lpf_alpha: float,
+) -> None:
+    prev_row: CaptureRow | None = None
+    for row in rows:
+        if prev_row is None:
+            row.left_phi_rate_raw = 0.0 if not math.isfinite(row.left_phi_rate_raw) else row.left_phi_rate_raw
+            row.right_phi_rate_raw = 0.0 if not math.isfinite(row.right_phi_rate_raw) else row.right_phi_rate_raw
+            row.left_phi_rate_lpf = 0.0 if not math.isfinite(row.left_phi_rate_lpf) else row.left_phi_rate_lpf
+            row.right_phi_rate_lpf = 0.0 if not math.isfinite(row.right_phi_rate_lpf) else row.right_phi_rate_lpf
+            row.left_length_rate_raw = 0.0
+            row.right_length_rate_raw = 0.0
+            row.left_length_rate_lpf = 0.0
+            row.right_length_rate_lpf = 0.0
+            prev_row = row
+            continue
+
+        dt = row.stm_time_sec - prev_row.stm_time_sec
+        if dt > 0.0:
+            computed_left_phi_rate = normalize_angle_delta(row.left_phi - prev_row.left_phi) / dt
+            computed_right_phi_rate = normalize_angle_delta(row.right_phi - prev_row.right_phi) / dt
+            row.left_length_rate_raw = (row.left_leg_length - prev_row.left_leg_length) / dt
+            row.right_length_rate_raw = (row.right_leg_length - prev_row.right_leg_length) / dt
+
+            if not math.isfinite(row.left_phi_rate_raw):
+                row.left_phi_rate_raw = computed_left_phi_rate
+            if not math.isfinite(row.right_phi_rate_raw):
+                row.right_phi_rate_raw = computed_right_phi_rate
+            if not math.isfinite(row.left_phi_rate_lpf):
+                row.left_phi_rate_lpf = (
+                    phi_rate_lpf_alpha * prev_row.left_phi_rate_lpf
+                    + (1.0 - phi_rate_lpf_alpha) * row.left_phi_rate_raw
+                )
+            if not math.isfinite(row.right_phi_rate_lpf):
+                row.right_phi_rate_lpf = (
+                    phi_rate_lpf_alpha * prev_row.right_phi_rate_lpf
+                    + (1.0 - phi_rate_lpf_alpha) * row.right_phi_rate_raw
+                )
+
+            row.left_length_rate_lpf = (
+                length_rate_lpf_alpha * prev_row.left_length_rate_lpf
+                + (1.0 - length_rate_lpf_alpha) * row.left_length_rate_raw
+            )
+            row.right_length_rate_lpf = (
+                length_rate_lpf_alpha * prev_row.right_length_rate_lpf
+                + (1.0 - length_rate_lpf_alpha) * row.right_length_rate_raw
+            )
+        else:
+            row.left_length_rate_raw = prev_row.left_length_rate_raw
+            row.right_length_rate_raw = prev_row.right_length_rate_raw
+            row.left_length_rate_lpf = prev_row.left_length_rate_lpf
+            row.right_length_rate_lpf = prev_row.right_length_rate_lpf
+            if not math.isfinite(row.left_phi_rate_raw):
+                row.left_phi_rate_raw = prev_row.left_phi_rate_raw
+            if not math.isfinite(row.right_phi_rate_raw):
+                row.right_phi_rate_raw = prev_row.right_phi_rate_raw
+            if not math.isfinite(row.left_phi_rate_lpf):
+                row.left_phi_rate_lpf = prev_row.left_phi_rate_lpf
+            if not math.isfinite(row.right_phi_rate_lpf):
+                row.right_phi_rate_lpf = prev_row.right_phi_rate_lpf
+        prev_row = row
+
+
+def capture_from_ros(args: argparse.Namespace) -> list[CaptureRow]:
+    try:
+        import rclpy
+        from rclpy.node import Node
+        from sensor_msgs.msg import Imu, JointState
+        from std_msgs.msg import UInt32MultiArray
+        from wheel_leg_msgs.msg import StandControlState
+    except ImportError as exc:
+        raise SystemExit(
+            "ROS Python messages are required for --source ros. "
+            "Source your ROS workspace before running."
+        ) from exc
+
+    class CaptureNode(Node):
+        def __init__(self) -> None:
+            super().__init__("stm32_state_capture")
+            self.rows: list[CaptureRow] = []
+            self.first_host_time_sec: float | None = None
+            self.latest_joint_state: JointState | None = None
+            self.latest_imu: Imu | None = None
+            self.latest_counters: UInt32MultiArray | None = None
+            self.create_subscription(JointState, "/joint_states", self.on_joint_state, 10)
+            self.create_subscription(Imu, "/imu", self.on_imu, 10)
+            self.create_subscription(
+                UInt32MultiArray, "/stm32_bridge/counters", self.on_counters, 10
+            )
+            self.create_subscription(
+                StandControlState, "/robot_state", self.on_robot_state, 10
+            )
+
+        def on_joint_state(self, msg: JointState) -> None:
+            self.latest_joint_state = msg
+
+        def on_imu(self, msg: Imu) -> None:
+            self.latest_imu = msg
+
+        def on_counters(self, msg: UInt32MultiArray) -> None:
+            self.latest_counters = msg
+
+        def on_robot_state(self, msg: StandControlState) -> None:
+            if self.latest_joint_state is None:
+                return
+            host_time_sec = time.time()
+            if self.first_host_time_sec is None:
+                self.first_host_time_sec = host_time_sec
+            self.rows.append(
+                build_row_from_ros(
+                    msg,
+                    self.latest_joint_state,
+                    self.latest_imu,
+                    self.latest_counters,
+                    host_time_sec,
+                    self.first_host_time_sec,
+                )
+            )
+
+    rclpy.init()
+    node = CaptureNode()
+    start = time.monotonic()
+    try:
+        while (time.monotonic() - start) < args.duration:
+            rclpy.spin_once(node, timeout_sec=0.05)
+    finally:
+        rows = node.rows
+        node.destroy_node()
+        rclpy.shutdown()
+    return rows
+
+
+def capture_from_serial(args: argparse.Namespace) -> tuple[list[CaptureRow], FrameParser]:
     parser = FrameParser()
     rows: list[CaptureRow] = []
-
-    print(
-        f"Capturing STM32 state from {args.port} at {args.baud} baud for "
-        f"{args.duration:.2f}s"
-    )
-    print(f"Output prefix: {output_dir / args.prefix}")
-
     start_monotonic = time.monotonic()
     first_host_time_sec = 0.0
 
@@ -776,9 +1022,45 @@ def main() -> None:
                         args.length_rate_lpf_alpha,
                     )
                 )
+    return rows, parser
+
+
+def main() -> None:
+    args = parse_args()
+    if args.duration <= 0.0:
+        raise SystemExit("--duration must be positive")
+    if not 0.0 <= args.phi_rate_lpf_alpha < 1.0:
+        raise SystemExit("--phi-rate-lpf-alpha must be in [0, 1)")
+    if not 0.0 <= args.length_rate_lpf_alpha < 1.0:
+        raise SystemExit("--length-rate-lpf-alpha must be in [0, 1)")
+    plot_groups = expand_plot_groups(args.plot_groups)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / f"{args.prefix}.csv"
+    plot_path = output_dir / f"{args.prefix}.png"
+    summary_path = output_dir / f"{args.prefix}.summary.txt"
+
+    print(f"Capturing robot state from source={args.source} for {args.duration:.2f}s")
+    if args.source == "serial":
+        print(f"Serial config: port={args.port} baud={args.baud}")
+    else:
+        print("ROS topics: /robot_state, /joint_states, /imu, /stm32_bridge/counters")
+    print(f"Output prefix: {output_dir / args.prefix}")
+
+    if args.source == "ros":
+        rows = capture_from_ros(args)
+        parser = FrameParser()
+        parser.frames_ok = len(rows)
+    else:
+        rows, parser = capture_from_serial(args)
 
     if not rows:
-        raise SystemExit("No valid STM32 state frames were captured.")
+        raise SystemExit("No valid samples were captured.")
+
+    recompute_leg_rate_columns(
+        rows, args.phi_rate_lpf_alpha, args.length_rate_lpf_alpha
+    )
 
     write_csv(rows, csv_path)
     write_summary(rows, parser, summary_path)
