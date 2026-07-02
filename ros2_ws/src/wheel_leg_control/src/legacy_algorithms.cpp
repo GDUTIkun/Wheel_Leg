@@ -112,7 +112,7 @@ double LegacyPidAlgorithm::Compute(const PidStepInput& input) {
   const double dt = input.dt;
   measure_ = input.measurement;
   reference_ = input.target;
-  error_ = reference_ - measure_;
+  error_ = measure_ - reference_;
 
   if (std::abs(error_) > deadband_) {
     p_out_ = kp_ * error_;
