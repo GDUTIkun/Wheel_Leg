@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "wheel_leg_control/legacy_algorithms.hpp"
 #include "wheel_leg_control/stand_control_pipeline.hpp"
 
 namespace wheel_leg_control {
@@ -23,12 +24,13 @@ class CountingPid final : public PidAlgorithm {
   explicit CountingPid(double output) : output_(output) {}
 
   double Compute(const PidStepInput& input) override {
-    (void)input;
+    last_input = input;
     ++calls;
     return output_;
   }
 
   int calls = 0;
+  PidStepInput last_input;
 
  private:
   double output_ = 0.0;
@@ -167,7 +169,20 @@ TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
       1.0, 0.01, fixture.targets, fixture.state, 1.0, config,
       fixture.algorithms);
 
-  EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
+  EXPECT_DOUBLE_EQ(
+      fixture.vmc.last_input.force, -outputs.left_leg_length_force);
+}
+
+TEST(LegacyPidAlgorithmTest, LongerTargetProducesNegativeOutput) {
+  LegacyPidConfig config;
+  config.kp = 2.0;
+  config.max_output = 100.0;
+  LegacyPidAlgorithm pid(config);
+
+  const double output =
+      pid.Compute({.measurement = 0.25, .target = 0.30, .dt = 0.01});
+
+  EXPECT_LT(output, 0.0);
 }
 
 }  // namespace

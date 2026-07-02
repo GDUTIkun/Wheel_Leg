@@ -153,7 +153,7 @@ ControlStepOutputs RunStandControlStep(
   const VmcJointTorques right_leg_command =
       stage_config.enable_vmc
           ? algorithms.vmc_algorithm->Compute(
-                {.force = outputs.right_leg_length_force,
+                {.force = -outputs.right_leg_length_force,
                  .torque = -outputs.right_lqr_hip_torque,
                  .leg_length = right_leg.leg_length,
                  .phi = right_leg.phi,
@@ -163,7 +163,7 @@ ControlStepOutputs RunStandControlStep(
   const VmcJointTorques left_leg_command =
       stage_config.enable_vmc
           ? algorithms.vmc_algorithm->Compute(
-                {.force = outputs.left_leg_length_force,
+                {.force = -outputs.left_leg_length_force,
                  .torque = -outputs.left_lqr_hip_torque,
                  .leg_length = left_leg.leg_length,
                  .phi = left_leg.phi,
