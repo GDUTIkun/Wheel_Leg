@@ -169,8 +169,7 @@ TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
       1.0, 0.01, fixture.targets, fixture.state, 1.0, config,
       fixture.algorithms);
 
-  EXPECT_DOUBLE_EQ(
-      fixture.vmc.last_input.force, -outputs.left_leg_length_force);
+  EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
 }
 
 TEST(LegacyPidAlgorithmTest, LongerTargetProducesNegativeOutput) {
