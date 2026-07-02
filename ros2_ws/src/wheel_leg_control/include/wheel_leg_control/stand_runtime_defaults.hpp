@@ -41,12 +41,12 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
       .leg_length =
           {
               .kp = 800.0,
-              .ki = 50.0,
+              .ki = 20.0,
               .kd = 30.0,
-              .max_output = 5000.0,
+              .max_output = 10.0,
               .deadband = 0.0001,
               .improvement_flags = 0b01100010,
-              .integral_limit = 5000.0,
+              .integral_limit = 3.0,
               .coef_a = 0.05,
               .coef_b = 0.1,
               .output_lpf_rc = 0.0,
