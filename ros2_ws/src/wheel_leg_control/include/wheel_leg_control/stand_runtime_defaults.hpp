@@ -104,6 +104,20 @@ inline ControlTargets DefaultStandControlTargets() {
   return targets;
 }
 
+inline StandControlStageConfig DefaultLegLengthOnlyStageConfig() {
+  StandControlStageConfig config;
+  config.enable_vmc = true;
+  config.enable_lqr = false;
+  config.enable_leg_length_pid = true;
+  config.enable_heading_control = false;
+  config.enable_anti_split = false;
+  config.enable_roll_compensation = false;
+  config.enable_wheel_output = false;
+  config.enable_hip_output = true;
+  config.enable_knee_output = true;
+  return config;
+}
+
 }  // namespace wheel_leg_control
 
 #endif  // WHEEL_LEG_CONTROL__STAND_RUNTIME_DEFAULTS_HPP_

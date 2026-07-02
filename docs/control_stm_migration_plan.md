@@ -96,11 +96,15 @@ ros2 launch wheel_leg_bringup hw.launch.py use_controller:=false command_enable:
 
 目标：只验证腿长力到髋/膝力矩映射。
 
+当前代码默认模式：
+
+- 裸启动 `wheel_leg_controller` 时，默认就是“腿长 PID + VMC”。
+- `hw.launch.py` 对应的 `control_hw.yaml` 也已改成同样配置。
+- 默认保持 `LQR / 航向 / 抗劈叉 / roll / 轮子输出` 全关，只向髋膝发力矩。
+
 建议参数：
 
 ```bash
-ros2 param set /wheel_leg_controller enable_leg_length_pid true
-ros2 param set /wheel_leg_controller enable_vmc true
 ros2 param set /wheel_leg_controller enable_hip_output true
 ros2 param set /wheel_leg_controller enable_knee_output true
 ```
@@ -118,6 +122,27 @@ ros2 param set /wheel_leg_controller enable_knee_output true
 - 悬空低力矩下髋/膝力矩方向正确。
 - 支撑力趋势正确。
 - 急停、超时、限幅和斜率限制工作正常。
+
+调参顺序：
+
+1. 先固定 `target_leg_length`，不要一边改目标一边调 PID。
+2. 先调 `leg_length_pid.kp`，让腿能“跟上”目标，但不出现连续上下弹跳。
+3. 再调 `leg_length_pid.kd`，专门压制落地后或抬放腿时的振荡。
+4. 最后再少量加入 `leg_length_pid.ki`，只用于消除静差，不用于“顶起”机器人。
+
+观察重点：
+
+- `leg_length` 能否稳定收敛到 `target_leg_length`
+- `/debug/control/leg_length_output` 是否平滑，是否频繁顶到限幅
+- 髋膝输出是否同向配合支撑，而不是一侧明显反着顶
+- 落地后若出现高频抖动，优先减 `kp` 或加一点 `kd`
+- 落地后若慢慢塌腿，再少量加 `ki`
+
+实机建议：
+
+- 第一轮把 `hip_effort_limit`、`knee_effort_limit` 保持在较小值，先确认方向对。
+- 每次只改一个参数，单次改幅建议不超过 `10%` 到 `20%`。
+- 若输出已频繁打满，先降 `kp`，不要继续加 `ki`。
 
 ### 4.3 LQR 阶段
 

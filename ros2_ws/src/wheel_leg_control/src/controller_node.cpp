@@ -1510,7 +1510,7 @@ class ControllerNode : public rclcpp::Node {
   }
 
   bool publish_control_command_ = false;
-  StandControlStageConfig stage_config_;
+  StandControlStageConfig stage_config_ = DefaultLegLengthOnlyStageConfig();
   bool clamp_warning_logged_ = false;
   bool has_processed_state_ = false;
   bool invalid_dt_warning_logged_ = false;
