@@ -1274,10 +1274,9 @@ class ControllerNode : public rclcpp::Node {
     wheel_leg_msgs::msg::ControlLoopDebug leg_output_msg;
     leg_output_msg.header.stamp = stamp;
     leg_output_msg.loop_name = "leg_length_output";
-    leg_output_msg.ref_primary = outputs.left_leg_length_force;
-    leg_output_msg.now_primary = outputs.right_leg_length_force;
-    leg_output_msg.ref_secondary = outputs.left_leg_length_force -
-                                   outputs.right_leg_length_force;
+    leg_output_msg.ref_primary = outputs.left_leg_length_pid_output;
+    leg_output_msg.now_primary = outputs.right_leg_length_pid_output;
+    leg_output_msg.ref_secondary = outputs.leg_length_gravity_compensation;
     leg_output_msg.now_secondary = 0.5 * (outputs.left_leg_length_force +
                                           outputs.right_leg_length_force);
     leg_length_output_debug_pub_->publish(leg_output_msg);

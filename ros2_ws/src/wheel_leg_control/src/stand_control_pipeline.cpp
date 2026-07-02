@@ -95,6 +95,9 @@ ControlStepOutputs RunStandControlStep(
           ? kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
                 std::cos(control_state.body.roll)
           : 0.0;
+  outputs.right_leg_length_pid_output = u_leg_length_r;
+  outputs.left_leg_length_pid_output = u_leg_length_l;
+  outputs.leg_length_gravity_compensation = leg_length_gravity_compensation;
   outputs.right_leg_length_force =
       u_leg_length_r + leg_length_gravity_compensation;
   outputs.left_leg_length_force =

@@ -54,6 +54,9 @@ struct ControlStepOutputs {
   wheel_leg_common::ControlCommand command;
   double right_wheel_torque = 0.0;
   double left_wheel_torque = 0.0;
+  double right_leg_length_pid_output = 0.0;
+  double left_leg_length_pid_output = 0.0;
+  double leg_length_gravity_compensation = 0.0;
   double right_leg_length_force = 0.0;
   double left_leg_length_force = 0.0;
   double left_lqr_hip_torque = 0.0;
