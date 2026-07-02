@@ -48,12 +48,13 @@ class CountingLqr final : public LqrAlgorithm {
 class CountingVmc final : public VmcAlgorithm {
  public:
   VmcJointTorques Compute(const VmcStepInput& input) const override {
-    (void)input;
+    last_input = input;
     ++calls;
     return {.hip_torque = 10.0, .knee_torque = 20.0};
   }
 
   mutable int calls = 0;
+  mutable VmcStepInput last_input;
 };
 
 struct PipelineFixture {
@@ -148,6 +149,25 @@ TEST(StandControlPipelineTest, OutputGatesZeroOnlySelectedActuatorGroups) {
   EXPECT_DOUBLE_EQ(EffortForJoint(outputs.command, "left_knee"), 0.0);
   EXPECT_DOUBLE_EQ(EffortForJoint(outputs.command, "right_wheel"), 0.0);
   EXPECT_DOUBLE_EQ(EffortForJoint(outputs.command, "left_wheel"), 0.0);
+}
+
+TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
+  PipelineFixture fixture;
+  fixture.state.body.roll = 0.0;
+  StandControlStageConfig config;
+  config.enable_vmc = true;
+  config.enable_lqr = false;
+  config.enable_leg_length_pid = true;
+  config.enable_heading_control = false;
+  config.enable_anti_split = false;
+  config.enable_roll_compensation = false;
+  config.enable_wheel_output = false;
+
+  const auto outputs = RunStandControlStep(
+      1.0, 0.01, fixture.targets, fixture.state, 1.0, config,
+      fixture.algorithms);
+
+  EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
 }
 
 }  // namespace
