@@ -112,7 +112,7 @@ double LegacyPidAlgorithm::Compute(const PidStepInput& input) {
   const double dt = input.dt;
   measure_ = input.measurement;
   reference_ = input.target;
-  error_ = measure_ - reference_;
+  error_ = reference_ - measure_;
 
   if (std::abs(error_) > deadband_) {
     p_out_ = kp_ * error_;
@@ -182,7 +182,7 @@ void LegacyPidAlgorithm::Reset(double measurement, double target) {
   measure_ = measurement;
   last_measure_ = measurement;
   reference_ = target;
-  error_ = measurement - target;
+  error_ = target - measurement;
   last_error_ = error_;
   last_i_term_ = 0.0;
   p_out_ = 0.0;
@@ -217,16 +217,17 @@ VmcJointTorques LegacyVmcAlgorithm::Compute(
       std::max(input.leg_length, std::numeric_limits<double>::epsilon());
   const double hip_minus_phi = input.hip_absolute - input.phi;
   const double calf_minus_phi = input.calf_absolute - input.phi;
+  const double calf_projection =
+      input.force * std::sin(calf_minus_phi) +
+      input.torque / leg_length * std::cos(calf_minus_phi);
+  const double thigh_projection =
+      input.force * std::sin(hip_minus_phi) +
+      input.torque / leg_length * std::cos(hip_minus_phi);
 
   VmcJointTorques output;
   output.hip_torque =
-      kThighLength *
-      (-input.force * std::sin(input.phi - input.hip_absolute) +
-       input.torque / leg_length * std::cos(hip_minus_phi));
-  output.knee_torque =
-      kCalfLength *
-      (-input.force * std::sin(input.phi - input.calf_absolute) +
-       input.torque / leg_length * std::cos(calf_minus_phi));
+      kThighLength * thigh_projection + kCalfLength * calf_projection;
+  output.knee_torque = kCalfLength * calf_projection;
   return output;
 }
 

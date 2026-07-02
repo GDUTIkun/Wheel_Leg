@@ -172,7 +172,7 @@ TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
   EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
 }
 
-TEST(LegacyPidAlgorithmTest, LongerTargetProducesNegativeOutput) {
+TEST(LegacyPidAlgorithmTest, LongerTargetProducesPositiveOutput) {
   LegacyPidConfig config;
   config.kp = 2.0;
   config.max_output = 100.0;
@@ -181,7 +181,7 @@ TEST(LegacyPidAlgorithmTest, LongerTargetProducesNegativeOutput) {
   const double output =
       pid.Compute({.measurement = 0.25, .target = 0.30, .dt = 0.01});
 
-  EXPECT_LT(output, 0.0);
+  EXPECT_GT(output, 0.0);
 }
 
 TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteRatherThanHipPlusCalf) {
