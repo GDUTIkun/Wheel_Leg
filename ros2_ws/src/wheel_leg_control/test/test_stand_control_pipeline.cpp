@@ -184,5 +184,24 @@ TEST(LegacyPidAlgorithmTest, LongerTargetProducesNegativeOutput) {
   EXPECT_LT(output, 0.0);
 }
 
+TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteRatherThanHipPlusCalf) {
+  LegacyVmcAlgorithm vmc;
+  const VmcStepInput first{
+      .force = 10.0,
+      .torque = 0.0,
+      .leg_length = 0.25,
+      .phi = 1.0,
+      .hip_absolute = 0.3,
+      .calf_absolute = 1.8,
+  };
+  VmcStepInput second = first;
+  second.hip_absolute = 0.9;
+
+  const auto first_output = vmc.Compute(first);
+  const auto second_output = vmc.Compute(second);
+
+  EXPECT_DOUBLE_EQ(first_output.knee_torque, second_output.knee_torque);
+}
+
 }  // namespace
 }  // namespace wheel_leg_control

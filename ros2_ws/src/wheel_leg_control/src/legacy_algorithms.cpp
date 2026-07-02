@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 namespace wheel_leg_control {
 namespace {
@@ -210,30 +211,22 @@ LqrControlOutput LegacyLqrAlgorithm::Compute(
 
 VmcJointTorques LegacyVmcAlgorithm::Compute(
     const VmcStepInput& input) const {
-  const double t2 = std::cos(input.phi);
-  const double t3 = std::cos(input.hip_absolute);
-  const double t4 = std::sin(input.phi);
-  const double t5 = std::sin(input.hip_absolute);
-  const double t6 = input.hip_absolute + input.calf_absolute;
-  const double t7 = 1.0 / input.leg_length;
-  const double t8 = std::cos(t6);
-  const double t9 = std::sin(t6);
-  const double t10 = t3 * (9.0 / 5.0e+1);
-  const double t11 = t5 * (9.0 / 5.0e+1);
-  const double t12 = -t10;
-  const double t13 = -t11;
-  const double t14 = t8 * (9.0 / 4.0e+1);
-  const double t15 = t9 * (9.0 / 4.0e+1);
-  const double t16 = t12 + t14;
-  const double t17 = t13 + t15;
+  constexpr double kThighLength = 9.0 / 5.0e+1;
+  constexpr double kCalfLength = 9.0 / 4.0e+1;
+  const double leg_length =
+      std::max(input.leg_length, std::numeric_limits<double>::epsilon());
+  const double hip_minus_phi = input.hip_absolute - input.phi;
+  const double calf_minus_phi = input.calf_absolute - input.phi;
 
   VmcJointTorques output;
   output.hip_torque =
-      -input.force * (t2 * t17 - t4 * t16) -
-      input.torque * t7 * (t2 * t16 + t4 * t17);
+      kThighLength *
+      (-input.force * std::sin(input.phi - input.hip_absolute) +
+       input.torque / leg_length * std::cos(hip_minus_phi));
   output.knee_torque =
-      input.force * (t4 * t8 * (9.0 / 4.0e+1) - t2 * t15) -
-      input.torque * t7 * (t2 * t14 + t4 * t15);
+      kCalfLength *
+      (-input.force * std::sin(input.phi - input.calf_absolute) +
+       input.torque / leg_length * std::cos(calf_minus_phi));
   return output;
 }
 
