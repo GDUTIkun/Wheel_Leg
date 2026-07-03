@@ -16,6 +16,9 @@ def generate_launch_description():
     command_enable = LaunchConfiguration("command_enable")
     publish_imu = LaunchConfiguration("publish_imu")
     publish_joint_states = LaunchConfiguration("publish_joint_states")
+    joint_limit_effort_threshold_nm = LaunchConfiguration(
+        "joint_limit_protection.effort_threshold_nm"
+    )
     control_params = LaunchConfiguration("control_params")
 
     return LaunchDescription(
@@ -29,6 +32,10 @@ def generate_launch_description():
             DeclareLaunchArgument("command_enable", default_value="false"),
             DeclareLaunchArgument("publish_imu", default_value="true"),
             DeclareLaunchArgument("publish_joint_states", default_value="true"),
+            DeclareLaunchArgument(
+                "joint_limit_protection.effort_threshold_nm",
+                default_value="3.0",
+            ),
             DeclareLaunchArgument(
                 "control_params",
                 default_value=PathJoinSubstitution(
@@ -54,6 +61,9 @@ def generate_launch_description():
                         "command_enable": command_enable,
                         "publish_imu": publish_imu,
                         "publish_joint_states": publish_joint_states,
+                        "joint_limit_protection.effort_threshold_nm": (
+                            joint_limit_effort_threshold_nm
+                        ),
                     }
                 ],
             ),

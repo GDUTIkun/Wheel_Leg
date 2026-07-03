@@ -29,7 +29,8 @@ ros2 launch wheel_leg_bringup hw.launch.py \
   use_controller:=true \
   command_enable:=false \
   serial_device:=/dev/ttyAMA4 \
-  baud_rate:=921600
+  baud_rate:=921600 \
+  joint_limit_protection.effort_threshold_nm:=0.0
 
 ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
   -p joint_name:=left_knee \

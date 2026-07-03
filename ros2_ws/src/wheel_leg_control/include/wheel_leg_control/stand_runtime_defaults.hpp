@@ -40,9 +40,9 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
   return {
       .leg_length =
           {
-              .kp = 800.0,
+              .kp = 400.0,
               .ki = 0.0,
-              .kd = 50.0,
+              .kd = 30.0,
               .max_output = 500.0,
               .deadband = 0.0001,
               .improvement_flags = 0b01100010,
@@ -99,7 +99,7 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
 
 inline ControlTargets DefaultStandControlTargets() {
   ControlTargets targets;
-  targets.target_leg_length = 0.25;
+  targets.target_leg_length = 0.22;
   targets.target_phi = DegreesToRadians(97.1);
   return targets;
 }
