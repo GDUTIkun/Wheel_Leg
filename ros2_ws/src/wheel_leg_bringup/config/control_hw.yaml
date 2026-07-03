@@ -3,7 +3,7 @@ wheel_leg_controller:
     publish_control_command: true
     debug_plot_publish_hz: 200.0
     enable_vmc: true
-    enable_lqr: false
+    enable_lqr: true
     enable_leg_length_pid: true
     enable_heading_control: false
     enable_anti_split: false
