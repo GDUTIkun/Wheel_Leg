@@ -25,8 +25,8 @@ global x2_fun xb2_fun theta2_fun phi2_fun Ja Jb
 
 %controlle
 global Q R
-Q = diag([300 80 100 60  300 60]);
-R = diag([0.001 0.002]);
+Q = diag([2000 80 900 50  800 40]);
+R = diag([0.01 0.05]);
 
 LQR_controller();
 
