@@ -44,19 +44,19 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 
 ## 3. 控制阶段参数
 
-控制器新增以下参数，仿真默认全开，硬件默认全关：
+控制器新增以下参数，仿真默认全开；当前硬件默认配置已收口到“腿长 PID + VMC + 髋膝输出开启，LQR/轮输出关闭”：
 
 | 参数 | 作用 | 硬件默认 |
 | --- | --- | --- |
-| `enable_vmc` | 启用腿端力/髋力矩到髋膝电机力矩的 VMC 映射 | `false` |
+| `enable_vmc` | 启用腿端力/髋力矩到髋膝电机力矩的 VMC 映射 | `true` |
 | `enable_lqr` | 启用 LQR 计算轮端力矩和髋关节虚拟力矩 | `false` |
-| `enable_leg_length_pid` | 启用腿长 PID 和重力补偿 | `false` |
+| `enable_leg_length_pid` | 启用腿长 PID 和重力补偿 | `true` |
 | `enable_heading_control` | 启用航向/yaw rate 控制与转向髋前馈 | `false` |
 | `enable_anti_split` | 启用左右腿 `phi` 差的抗劈叉控制 | `false` |
 | `enable_roll_compensation` | 启用 roll 平衡补偿 | `false` |
 | `enable_wheel_output` | 允许发布左右轮力矩 | `false` |
-| `enable_hip_output` | 允许发布左右髋力矩 | `false` |
-| `enable_knee_output` | 允许发布左右膝力矩 | `false` |
+| `enable_hip_output` | 允许发布左右髋力矩 | `true` |
+| `enable_knee_output` | 允许发布左右膝力矩 | `true` |
 | `target_leg_length_min` | 实物侧腿长目标下限，单位 m | `0.15` |
 | `target_leg_length_max` | 实物侧腿长目标上限，单位 m | `0.32` |
 | `target_phi_min_deg` | 实物侧腿角目标下限，单位 deg | `30.0` |
@@ -94,7 +94,7 @@ ros2 launch wheel_leg_bringup hw.launch.py use_controller:=false command_enable:
 
 ### 4.2 VMC 阶段
 
-目标：只验证腿长力到髋/膝力矩映射。
+目标：验证腿长力到髋/膝力矩映射，并完成进入 LQR 前的腿长控制闭环。
 
 当前代码默认模式：
 
@@ -144,9 +144,14 @@ ros2 param set /wheel_leg_controller enable_knee_output true
 - 每次只改一个参数，单次改幅建议不超过 `10%` 到 `20%`。
 - 若输出已频繁打满，先降 `kp`，不要继续加 `ki`。
 
+当前进度补充：
+
+- `2026-07-04` 已按该模式完成腿长控制阶段推进。
+- 文档后续不再把 VMC 阶段视为“待开始”，当前主线已转入 LQR。
+
 ### 4.3 LQR 阶段
 
-目标：启用 VMC + LQR，先验证平衡主环输出方向。
+目标：在已完成腿长控制基础上，启用 VMC + LQR，验证平衡主环输出方向并逐步进入轻触地/短时落地联调。
 
 建议参数：
 
@@ -166,6 +171,11 @@ ros2 param set /wheel_leg_controller enable_wheel_output true
 - 先悬空观察轮端和髋关节输出符号。
 - 再轻触地观察支撑趋势。
 - 最后短时间落地，避免直接长时间闭环。
+
+当前阶段关注：
+
+- 优先确认 `pitch`、`pitch_rate`、`phi_rate`、`base_velocity` 和轮端输出符号一致。
+- 若 LQR 打开后出现明显前后冲、轮子快速打满或髋部反向顶杆，先回头检查状态方向和滤波，再继续加大接地时间。
 
 ### 4.4 落地稳定性阶段
 
@@ -282,13 +292,13 @@ colcon --log-base ros2_ws/log test \
 | 控制阶段参数与运行时切换 | `[x]` | 已接入 `wheel_leg_controller` |
 | `RunStandControlStep` 阶段门控 | `[x]` | VMC/LQR/PID/航向/抗劈叉/roll/输出组已可单独关闭 |
 | 仿真参数文件 | `[x]` | `control_sim.yaml` 默认全功能 |
-| 硬件参数文件 | `[x]` | `control_hw.yaml` 默认保守全关 |
+| 硬件参数文件 | `[x]` | `control_hw.yaml` 当前默认“腿长 PID + VMC + 髋膝输出开，LQR/轮输出关” |
 | launch 加载参数 | `[x]` | `sim.launch.py` / `hw.launch.py` 已加载各自参数 |
 | 硬件状态 assembler | `[x]` | 已从 bridge 节点拆出并加测试 |
 | 构建与单元测试 | `[v]` | `wheel_leg_control`、`wheel_leg_stm32_bridge`、`wheel_leg_bringup` 构建通过，新增测试通过 |
-| 传感器阶段实机验证 | `[ ]` | 待现场测试 |
-| VMC 阶段实机验证 | `[ ]` | 待现场测试 |
-| LQR 阶段实机验证 | `[ ]` | 待现场测试 |
+| 传感器阶段实机验证 | `[x]` | 已支撑腿长控制阶段推进，剩余问题转入 LQR 联调中继续复核 |
+| VMC 阶段实机验证 | `[x]` | 腿长控制阶段已完成，当前已进入 LQR |
+| LQR 阶段实机验证 | `[~]` | 当前主线 |
 | 落地稳定性验证 | `[ ]` | 待现场测试 |
 | 航向+抗劈叉验证 | `[ ]` | 待现场测试 |
 | roll 补偿验证 | `[ ]` | 待现场测试 |

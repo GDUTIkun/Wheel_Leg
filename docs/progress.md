@@ -36,6 +36,7 @@
 - 对齐 ROS2 控制命令到 STM32 电机执行命令的方向、单位、限幅和安全状态。
 - 将当前硬件控制主线口径切换并固定为 `200Hz`。
 - 固定实机初期按悬空、低力矩、轻触地、站立闭环的顺序推进。
+- 完成腿长控制阶段，转入 LQR 平衡主环联调。
 
 `iter-005` 不关注：
 
@@ -53,10 +54,10 @@
 | 遥控输入与命令映射 | `wheel_leg_rc` / `wheel_leg_control` | `[v] 已通过验证` | 已完成真实遥控器通道确认，`/cmd_vel`、`/control_mode`、`/body_cmd` 与 failsafe 映射已实机验证 |
 | 仿真控制参数基线 | `100hz_balance_notes.md` | `[v] 阶段冻结` | 100Hz 仿真已可稳定站立，参数等待硬件接入后重新小步调整 |
 | 腿部角度映射 | `leg_angle_mapping.md` | `[v] 速度已验证` | 已按现场观测修正左右髋和左右膝世界角；四个关节角速度极性已实机确认，knee 角速度已正确叠加 hip 角速度 |
-| STM32 硬件接入任务 | `stm32_hardware_integration.md` | `[~] 进行中` | 下一阶段主线，先打通通信、状态上报、命令下发、安全停机和方向/单位校验 |
+| STM32 硬件接入任务 | `stm32_hardware_integration.md` | `[~] 进行中` | 当前已完成通信、状态装配与腿长控制阶段，主线已转入 LQR 联调 |
 | STM32 与 ROS 通信内容 | `stm32_ros_comm_task.md` | `[~] 首轮联调已完成，V1 代码已落地` | 第一版固定为串口通信；`2026-06-26` 已确认 STM 状态上报稳定 `200Hz`，`2026-06-27` 起 ROS 硬件控制口径同步切到 `200Hz` |
 | 实机 200Hz 控制口径 | `hardware_control_200hz.md` | `[x] 已记录` | 已明确当前硬件主线为 `200Hz`，并记录控制器 `dt` 参数、topic 频率和仿真/实机口径分离原则 |
-| 控制层接入 STM 分阶段迁移 | `control_stm_migration_plan.md` | `[x] 代码已完成，[!] 待实机验证` | 已加入控制阶段开关、仿真/硬件两套参数、硬件状态 assembler 和自动测试；后续按传感器、VMC、LQR、落地稳定性、航向+抗劈叉、roll 补偿逐段验证 |
+| 控制层接入 STM 分阶段迁移 | `control_stm_migration_plan.md` | `[~] LQR 阶段进行中` | 已完成阶段开关、硬件状态装配、传感器基础联调与腿长控制阶段，当前进入 LQR 平衡主环联调 |
 | 工程结构与接口约束 | `architecture.md` / `protocol.md` | `[~] 持续维护` | 保留为当前文档入口，不再维护旧 `docs/doc/` 规划体系 |
 
 ## 5. 推荐执行顺序
@@ -67,9 +68,9 @@
 4. `[x]` 冻结 100Hz 仿真阶段，等待硬件接入后再调最终参数。
 5. `[~]` 进入 STM32 硬件接入任务，先按 `stm32_ros_comm_task.md` 固定通信内容，再验证通信、状态、命令和安全链路。
 6. `[x]` 为控制层接入 STM 建立阶段开关、仿真/硬件参数入口和硬件状态装配模块。
-7. `[ ]` 按 `control_stm_migration_plan.md` 完成传感器阶段验证。
-8. `[ ]` 按 `control_stm_migration_plan.md` 完成 VMC 阶段验证。
-9. `[ ]` 按 `control_stm_migration_plan.md` 完成 LQR 与落地稳定性验证。
+7. `[x]` 按 `control_stm_migration_plan.md` 完成进入控制前所需的传感器基础联调。
+8. `[x]` 完成腿长控制阶段，已验证可进入下一阶段联调。
+9. `[~]` 按 `control_stm_migration_plan.md` 进入 LQR 与落地稳定性验证。
 10. `[ ]` 按 `control_stm_migration_plan.md` 完成航向+抗劈叉与 roll 补偿验证。
 
 ## 6. 当前输入与已完成基础
@@ -87,6 +88,7 @@
 - 当前正式通信节点 V1 代码已接入仓库：ROS 侧 bridge 不再是占位节点，`RcStatus` 已新增 `estop_active`，默认 `RC channel 7` 低值端为急停，并由 bridge 直接门控下行 `enable/estop` 命令帧。
 - 当前控制层接入 STM 的第一版代码已接入仓库：`wheel_leg_controller` 支持阶段开关，`hw.launch.py` 默认加载硬件保守参数，`sim.launch.py` 默认加载仿真全功能参数，硬件状态装配已从 bridge 节点拆出并加单元测试。
 - `2026-06-27` 已将 `control_hw.yaml` 切换到 `expected_dt_sec = 0.005`、`accepted_dt_tolerance_sec = 0.002`，用于接受 `200Hz` 硬件状态样本。
+- `2026-07-04` 当前硬件默认控制门控已收口为“腿长 PID + VMC 打开，髋/膝输出打开，LQR 与轮输出关闭”，对应腿长控制阶段已完成，准备进入 LQR。
 
 ## 7. 当前阻塞或待确认问题
 
@@ -133,6 +135,7 @@
 ### 7.5 实机调参入口
 
 - 实机闭环初期优先观察 `pitch`、`pitch_rate`、`phi`、`phi_rate`、`base_velocity`、轮端力矩和髋关节力矩。
+- 当前进度口径：腿长控制阶段已完成，下一步主看 `pitch/pitch_rate/base_velocity` 与轮端输出方向，进入 LQR 联调。
 - 若出现 pitch 高频震荡，优先检查 IMU 方向、gyro 滤波、`pitch_rate` 增益和执行器斜率限制。
 - 若出现缓慢前后跑偏，优先检查 `target_phi`、`target_pitch`、速度方向和距离积分。
 - 若出现单侧压低，优先检查左右腿角度、roll、VMC 映射和左右电机方向。
