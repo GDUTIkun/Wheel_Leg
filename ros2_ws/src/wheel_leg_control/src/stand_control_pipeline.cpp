@@ -7,6 +7,32 @@
 namespace wheel_leg_control {
 namespace {
 
+struct VmcProjectionDebug {
+  double thigh_projection = 0.0;
+  double calf_projection = 0.0;
+};
+
+VmcProjectionDebug ComputeVmcProjectionDebug(
+    double force,
+    double torque,
+    double leg_length,
+    double phi,
+    double hip_absolute,
+    double calf_absolute) {
+  const double safe_leg_length = std::max(leg_length, 1e-9);
+  const double hip_minus_phi = hip_absolute - phi;
+  const double calf_minus_phi = calf_absolute - phi;
+
+  VmcProjectionDebug output;
+  output.calf_projection =
+      force * std::sin(calf_minus_phi) +
+      torque / safe_leg_length * std::cos(calf_minus_phi);
+  output.thigh_projection =
+      force * std::sin(hip_minus_phi) +
+      torque / safe_leg_length * std::cos(hip_minus_phi);
+  return output;
+}
+
 wheel_leg_common::TimePoint ToCommonTime(double sim_time) {
   wheel_leg_common::TimePoint stamp;
   stamp.sec = static_cast<std::int32_t>(sim_time);
@@ -144,6 +170,25 @@ ControlStepOutputs RunStandControlStep(
   outputs.right_lqr_hip_torque =
       right_lqr_output.hip_torque - anti_crash_hip_torque +
       outputs.roll_balance_output;
+
+  const VmcProjectionDebug right_vmc_projection = ComputeVmcProjectionDebug(
+      -outputs.right_leg_length_force,
+      outputs.right_lqr_hip_torque,
+      right_leg.leg_length,
+      right_leg.phi,
+      right_leg.hip_absolute,
+      right_leg.calf_absolute);
+  const VmcProjectionDebug left_vmc_projection = ComputeVmcProjectionDebug(
+      -outputs.left_leg_length_force,
+      outputs.left_lqr_hip_torque,
+      left_leg.leg_length,
+      left_leg.phi,
+      left_leg.hip_absolute,
+      left_leg.calf_absolute);
+  outputs.right_vmc_thigh_projection = right_vmc_projection.thigh_projection;
+  outputs.right_vmc_calf_projection = right_vmc_projection.calf_projection;
+  outputs.left_vmc_thigh_projection = left_vmc_projection.thigh_projection;
+  outputs.left_vmc_calf_projection = left_vmc_projection.calf_projection;
 
   const VmcJointTorques right_leg_command =
       stage_config.enable_vmc

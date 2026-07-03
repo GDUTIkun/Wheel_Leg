@@ -329,6 +329,12 @@ class ControllerNode : public rclcpp::Node {
     leg_length_output_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/leg_length_output", rclcpp::SystemDefaultsQoS());
+    lqr_hip_torque_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/lqr_hip_torque", rclcpp::SystemDefaultsQoS());
+    vmc_projection_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/vmc_projection", rclcpp::SystemDefaultsQoS());
     anti_crash_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/anti_crash", rclcpp::SystemDefaultsQoS());
@@ -806,6 +812,8 @@ class ControllerNode : public rclcpp::Node {
     ApplyZeroHoldCommandLimit(&limited_command);
     PublishWheelEffortDebug(limited_command, state_time_sec);
     PublishLegLengthOutputDebug(*step_outputs, state_time_sec);
+    PublishLqrHipTorqueDebug(*step_outputs, state_time_sec);
+    PublishVmcProjectionDebug(*step_outputs, state_time_sec);
     PublishRollBalanceDebug(*step_outputs, control_state, state_time_sec);
     PublishTurnInternalDebug(*step_outputs, state_time_sec);
     RecordTraceSample(
@@ -1306,6 +1314,48 @@ class ControllerNode : public rclcpp::Node {
     return true;
   }
 
+  void PublishLqrHipTorqueDebug(
+      const ControlStepOutputs& outputs,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug lqr_msg;
+    lqr_msg.header.stamp = stamp;
+    lqr_msg.loop_name = "lqr_hip_torque";
+    lqr_msg.ref_primary = outputs.left_lqr_hip_torque;
+    lqr_msg.now_primary = outputs.right_lqr_hip_torque;
+    lqr_msg.ref_secondary = outputs.left_leg_length_force;
+    lqr_msg.now_secondary = outputs.right_leg_length_force;
+    lqr_hip_torque_debug_pub_->publish(lqr_msg);
+  }
+
+  void PublishVmcProjectionDebug(
+      const ControlStepOutputs& outputs,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug vmc_msg;
+    vmc_msg.header.stamp = stamp;
+    vmc_msg.loop_name = "vmc_projection";
+    vmc_msg.ref_primary = outputs.left_vmc_thigh_projection;
+    vmc_msg.now_primary = outputs.left_vmc_calf_projection;
+    vmc_msg.ref_secondary = outputs.right_vmc_thigh_projection;
+    vmc_msg.now_secondary = outputs.right_vmc_calf_projection;
+    vmc_projection_debug_pub_->publish(vmc_msg);
+  }
+
   void PublishRollBalanceDebug(
       const ControlStepOutputs& outputs,
       const StandControlState& control_state,
@@ -1599,6 +1649,10 @@ class ControllerNode : public rclcpp::Node {
       leg_length_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       leg_length_output_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      lqr_hip_torque_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      vmc_projection_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       anti_crash_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
