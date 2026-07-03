@@ -335,6 +335,9 @@ class ControllerNode : public rclcpp::Node {
     vmc_projection_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/vmc_projection", rclcpp::SystemDefaultsQoS());
+    vmc_torque_column_debug_pub_ =
+        create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
+            "/debug/control/vmc_torque_column", rclcpp::SystemDefaultsQoS());
     anti_crash_debug_pub_ =
         create_publisher<wheel_leg_msgs::msg::ControlLoopDebug>(
             "/debug/control/anti_crash", rclcpp::SystemDefaultsQoS());
@@ -814,6 +817,7 @@ class ControllerNode : public rclcpp::Node {
     PublishLegLengthOutputDebug(*step_outputs, state_time_sec);
     PublishLqrHipTorqueDebug(*step_outputs, state_time_sec);
     PublishVmcProjectionDebug(*step_outputs, state_time_sec);
+    PublishVmcTorqueColumnDebug(*step_outputs, state_time_sec);
     PublishRollBalanceDebug(*step_outputs, control_state, state_time_sec);
     PublishTurnInternalDebug(*step_outputs, state_time_sec);
     RecordTraceSample(
@@ -1348,12 +1352,33 @@ class ControllerNode : public rclcpp::Node {
 
     wheel_leg_msgs::msg::ControlLoopDebug vmc_msg;
     vmc_msg.header.stamp = stamp;
-    vmc_msg.loop_name = "vmc_projection";
+    vmc_msg.loop_name = "vmc_raw_joint_torque";
     vmc_msg.ref_primary = outputs.left_vmc_thigh_projection;
     vmc_msg.now_primary = outputs.left_vmc_calf_projection;
     vmc_msg.ref_secondary = outputs.right_vmc_thigh_projection;
     vmc_msg.now_secondary = outputs.right_vmc_calf_projection;
     vmc_projection_debug_pub_->publish(vmc_msg);
+  }
+
+  void PublishVmcTorqueColumnDebug(
+      const ControlStepOutputs& outputs,
+      double state_time_sec) {
+    const auto stamp = [state_time_sec]() {
+      builtin_interfaces::msg::Time out;
+      out.sec = static_cast<std::int32_t>(state_time_sec);
+      out.nanosec = static_cast<std::uint32_t>(
+          (state_time_sec - static_cast<double>(out.sec)) * 1000000000.0);
+      return out;
+    }();
+
+    wheel_leg_msgs::msg::ControlLoopDebug vmc_msg;
+    vmc_msg.header.stamp = stamp;
+    vmc_msg.loop_name = "vmc_torque_column";
+    vmc_msg.ref_primary = outputs.left_vmc_torque_column_hip;
+    vmc_msg.now_primary = outputs.left_vmc_torque_column_knee;
+    vmc_msg.ref_secondary = outputs.right_vmc_torque_column_hip;
+    vmc_msg.now_secondary = outputs.right_vmc_torque_column_knee;
+    vmc_torque_column_debug_pub_->publish(vmc_msg);
   }
 
   void PublishRollBalanceDebug(
@@ -1653,6 +1678,8 @@ class ControllerNode : public rclcpp::Node {
       lqr_hip_torque_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       vmc_projection_debug_pub_;
+  rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
+      vmc_torque_column_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr
       anti_crash_debug_pub_;
   rclcpp::Publisher<wheel_leg_msgs::msg::ControlLoopDebug>::SharedPtr

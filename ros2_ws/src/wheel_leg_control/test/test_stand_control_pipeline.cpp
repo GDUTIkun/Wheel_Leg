@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <string>
 
 #include "wheel_leg_control/legacy_algorithms.hpp"

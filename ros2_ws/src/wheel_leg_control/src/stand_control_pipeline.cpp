@@ -8,12 +8,16 @@
 namespace wheel_leg_control {
 namespace {
 
-struct VmcProjectionDebug {
-  double thigh_projection = 0.0;
-  double calf_projection = 0.0;
+constexpr double kThighLength = 9.0 / 5.0e+1;
+constexpr double kCalfLength = 9.0 / 4.0e+1;
+
+struct SerialVmcJointContributions {
+  VmcJointTorques total;
+  VmcJointTorques force_only;
+  VmcJointTorques torque_only;
 };
 
-VmcProjectionDebug ComputeVmcProjectionDebug(
+SerialVmcJointContributions ComputeSerialVmcJointContributions(
     double force,
     double torque,
     double leg_length,
@@ -24,13 +28,27 @@ VmcProjectionDebug ComputeVmcProjectionDebug(
   const double hip_minus_phi = hip_absolute - phi;
   const double calf_minus_phi = calf_absolute - phi;
 
-  VmcProjectionDebug output;
-  output.calf_projection =
-      force * std::sin(calf_minus_phi) +
-      torque / safe_leg_length * std::cos(calf_minus_phi);
-  output.thigh_projection =
-      force * std::sin(hip_minus_phi) +
-      torque / safe_leg_length * std::cos(hip_minus_phi);
+  const double hip_force_column =
+      kThighLength * std::sin(hip_minus_phi) +
+      kCalfLength * std::sin(calf_minus_phi);
+  const double knee_force_column =
+      kCalfLength * std::sin(calf_minus_phi);
+  const double hip_torque_column =
+      (kThighLength * std::cos(hip_minus_phi) +
+       kCalfLength * std::cos(calf_minus_phi)) /
+      safe_leg_length;
+  const double knee_torque_column =
+      kCalfLength * std::cos(calf_minus_phi) / safe_leg_length;
+
+  SerialVmcJointContributions output;
+  output.force_only.hip_torque = hip_force_column * force;
+  output.force_only.knee_torque = knee_force_column * force;
+  output.torque_only.hip_torque = hip_torque_column * torque;
+  output.torque_only.knee_torque = knee_torque_column * torque;
+  output.total.hip_torque =
+      output.force_only.hip_torque + output.torque_only.hip_torque;
+  output.total.knee_torque =
+      output.force_only.knee_torque + output.torque_only.knee_torque;
   return output;
 }
 
@@ -171,25 +189,22 @@ ControlStepOutputs RunStandControlStep(
   outputs.right_lqr_hip_torque =
       right_lqr_output.hip_torque - anti_crash_hip_torque +
       outputs.roll_balance_output;
-
-  const VmcProjectionDebug right_vmc_projection = ComputeVmcProjectionDebug(
-      -outputs.right_leg_length_force,
-      outputs.right_lqr_hip_torque,
-      right_leg.leg_length,
-      right_leg.phi,
-      right_leg.hip_absolute,
-      right_leg.calf_absolute);
-  const VmcProjectionDebug left_vmc_projection = ComputeVmcProjectionDebug(
-      -outputs.left_leg_length_force,
-      outputs.left_lqr_hip_torque,
-      left_leg.leg_length,
-      left_leg.phi,
-      left_leg.hip_absolute,
-      left_leg.calf_absolute);
-  outputs.right_vmc_thigh_projection = right_vmc_projection.thigh_projection;
-  outputs.right_vmc_calf_projection = right_vmc_projection.calf_projection;
-  outputs.left_vmc_thigh_projection = left_vmc_projection.thigh_projection;
-  outputs.left_vmc_calf_projection = left_vmc_projection.calf_projection;
+  const SerialVmcJointContributions right_vmc_contributions =
+      ComputeSerialVmcJointContributions(
+          -outputs.right_leg_length_force,
+          outputs.right_lqr_hip_torque,
+          right_leg.leg_length,
+          right_leg.phi,
+          right_leg.hip_absolute,
+          right_leg.calf_absolute);
+  const SerialVmcJointContributions left_vmc_contributions =
+      ComputeSerialVmcJointContributions(
+          -outputs.left_leg_length_force,
+          outputs.left_lqr_hip_torque,
+          left_leg.leg_length,
+          left_leg.phi,
+          left_leg.hip_absolute,
+          left_leg.calf_absolute);
 
   const VmcJointTorques right_leg_command =
       stage_config.enable_vmc
@@ -211,6 +226,18 @@ ControlStepOutputs RunStandControlStep(
                  .hip_absolute = left_leg.hip_absolute,
                  .calf_absolute = left_leg.calf_absolute})
           : VmcJointTorques{};
+  outputs.right_vmc_thigh_projection = right_leg_command.hip_torque;
+  outputs.right_vmc_calf_projection = right_leg_command.knee_torque;
+  outputs.left_vmc_thigh_projection = left_leg_command.hip_torque;
+  outputs.left_vmc_calf_projection = left_leg_command.knee_torque;
+  outputs.right_vmc_torque_column_hip =
+      right_vmc_contributions.torque_only.hip_torque;
+  outputs.right_vmc_torque_column_knee =
+      right_vmc_contributions.torque_only.knee_torque;
+  outputs.left_vmc_torque_column_hip =
+      left_vmc_contributions.torque_only.hip_torque;
+  outputs.left_vmc_torque_column_knee =
+      left_vmc_contributions.torque_only.knee_torque;
 
   outputs.right_wheel_torque = stage_config.enable_wheel_output
                                    ? right_lqr_output.wheel_torque +

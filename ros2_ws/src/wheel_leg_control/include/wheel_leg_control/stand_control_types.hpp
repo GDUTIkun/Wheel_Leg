@@ -65,6 +65,10 @@ struct ControlStepOutputs {
   double left_vmc_calf_projection = 0.0;
   double right_vmc_thigh_projection = 0.0;
   double right_vmc_calf_projection = 0.0;
+  double left_vmc_torque_column_hip = 0.0;
+  double left_vmc_torque_column_knee = 0.0;
+  double right_vmc_torque_column_hip = 0.0;
+  double right_vmc_torque_column_knee = 0.0;
   double steer_output = 0.0;
   double anti_crash_output = 0.0;
   double roll_balance_output = 0.0;
