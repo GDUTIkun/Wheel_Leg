@@ -86,7 +86,7 @@ ControlStepOutputs RunStandControlStep(
                  .target = targets.target_leg_length,
                  .dt = dt})
           : 0.0;
-  const double leg_length_gravity_compensation = 0.0;
+  const double leg_length_gravity_compensation = -17.0;
   outputs.right_leg_length_pid_output = u_leg_length_r;
   outputs.left_leg_length_pid_output = u_leg_length_l;
   outputs.leg_length_gravity_compensation = leg_length_gravity_compensation;
