@@ -11,8 +11,8 @@ wheel_leg_controller:
     enable_wheel_output: false
     enable_hip_output: true
     enable_knee_output: true
-    hip_effort_limit: 5.0
-    knee_effort_limit: 5.0
+    hip_effort_limit: 10.0
+    knee_effort_limit: 10.0
     wheel_effort_limit: 1.0
     expected_dt_sec: 0.005
     accepted_dt_tolerance_sec: 0.002
