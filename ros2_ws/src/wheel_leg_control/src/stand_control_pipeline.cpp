@@ -1,15 +1,11 @@
 #include "wheel_leg_control/stand_control_pipeline.hpp"
 
-#include <cmath>
 #include <cstdint>
 
 #include <wheel_leg_common/types.hpp>
 
 namespace wheel_leg_control {
 namespace {
-
-constexpr double kLegLengthGravityCompMass = 3.99077;
-constexpr double kGravityAcceleration = 9.81;
 
 wheel_leg_common::TimePoint ToCommonTime(double sim_time) {
   wheel_leg_common::TimePoint stamp;
@@ -90,11 +86,7 @@ ControlStepOutputs RunStandControlStep(
                  .target = targets.target_leg_length,
                  .dt = dt})
           : 0.0;
-  const double leg_length_gravity_compensation =
-      stage_config.enable_leg_length_pid
-          ? kLegLengthGravityCompMass / 2.0 * kGravityAcceleration *
-                std::cos(control_state.body.roll)
-          : 0.0;
+  const double leg_length_gravity_compensation = 0.0;
   outputs.right_leg_length_pid_output = u_leg_length_r;
   outputs.left_leg_length_pid_output = u_leg_length_l;
   outputs.leg_length_gravity_compensation = leg_length_gravity_compensation;

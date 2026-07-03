@@ -172,7 +172,7 @@ TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
   EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
 }
 
-TEST(StandControlPipelineTest, SeparatesLegLengthPidOutputFromGravityCompensation) {
+TEST(StandControlPipelineTest, LegLengthForceUsesPidOutputWithoutGravityCompensation) {
   PipelineFixture fixture;
   fixture.state.body.roll = 0.0;
 
@@ -182,14 +182,11 @@ TEST(StandControlPipelineTest, SeparatesLegLengthPidOutputFromGravityCompensatio
 
   EXPECT_DOUBLE_EQ(outputs.left_leg_length_pid_output, 5.0);
   EXPECT_DOUBLE_EQ(outputs.right_leg_length_pid_output, 5.0);
-  EXPECT_DOUBLE_EQ(
-      outputs.left_leg_length_force,
-      outputs.left_leg_length_pid_output +
-          outputs.leg_length_gravity_compensation);
-  EXPECT_DOUBLE_EQ(
-      outputs.right_leg_length_force,
-      outputs.right_leg_length_pid_output +
-          outputs.leg_length_gravity_compensation);
+  EXPECT_DOUBLE_EQ(outputs.leg_length_gravity_compensation, 0.0);
+  EXPECT_DOUBLE_EQ(outputs.left_leg_length_force,
+                   outputs.left_leg_length_pid_output);
+  EXPECT_DOUBLE_EQ(outputs.right_leg_length_force,
+                   outputs.right_leg_length_pid_output);
 }
 
 TEST(LegacyPidAlgorithmTest, MeasurementBelowTargetProducesNegativeOutput) {
