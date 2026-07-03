@@ -1,5 +1,6 @@
 #include "wheel_leg_control/stand_control_pipeline.hpp"
 
+#include <cmath>
 #include <cstdint>
 
 #include <wheel_leg_common/types.hpp>
