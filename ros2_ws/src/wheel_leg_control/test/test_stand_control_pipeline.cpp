@@ -153,7 +153,7 @@ TEST(StandControlPipelineTest, OutputGatesZeroOnlySelectedActuatorGroups) {
   EXPECT_DOUBLE_EQ(EffortForJoint(outputs.command, "left_wheel"), 0.0);
 }
 
-TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
+TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithSignFlip) {
   PipelineFixture fixture;
   fixture.state.body.roll = 0.0;
   StandControlStageConfig config;
@@ -169,10 +169,10 @@ TEST(StandControlPipelineTest, LegLengthForceFeedsIntoVmcWithoutExtraSignFlip) {
       1.0, 0.01, fixture.targets, fixture.state, 1.0, config,
       fixture.algorithms);
 
-  EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, outputs.left_leg_length_force);
+  EXPECT_DOUBLE_EQ(fixture.vmc.last_input.force, -outputs.left_leg_length_force);
 }
 
-TEST(StandControlPipelineTest, LegLengthForceUsesPidOutputWithoutGravityCompensation) {
+TEST(StandControlPipelineTest, LegLengthForceIncludesGravityCompensation) {
   PipelineFixture fixture;
   fixture.state.body.roll = 0.0;
 
@@ -182,14 +182,16 @@ TEST(StandControlPipelineTest, LegLengthForceUsesPidOutputWithoutGravityCompensa
 
   EXPECT_DOUBLE_EQ(outputs.left_leg_length_pid_output, 5.0);
   EXPECT_DOUBLE_EQ(outputs.right_leg_length_pid_output, 5.0);
-  EXPECT_DOUBLE_EQ(outputs.leg_length_gravity_compensation, 0.0);
+  EXPECT_DOUBLE_EQ(outputs.leg_length_gravity_compensation, 10.0);
   EXPECT_DOUBLE_EQ(outputs.left_leg_length_force,
-                   outputs.left_leg_length_pid_output);
+                   outputs.left_leg_length_pid_output +
+                       outputs.leg_length_gravity_compensation);
   EXPECT_DOUBLE_EQ(outputs.right_leg_length_force,
-                   outputs.right_leg_length_pid_output);
+                   outputs.right_leg_length_pid_output +
+                       outputs.leg_length_gravity_compensation);
 }
 
-TEST(LegacyPidAlgorithmTest, MeasurementBelowTargetProducesNegativeOutput) {
+TEST(LegacyPidAlgorithmTest, MeasurementBelowTargetProducesPositiveOutput) {
   LegacyPidConfig config;
   config.kp = 2.0;
   config.max_output = 100.0;
@@ -198,10 +200,10 @@ TEST(LegacyPidAlgorithmTest, MeasurementBelowTargetProducesNegativeOutput) {
   const double output =
       pid.Compute({.measurement = 0.25, .target = 0.30, .dt = 0.01});
 
-  EXPECT_LT(output, 0.0);
+  EXPECT_GT(output, 0.0);
 }
 
-TEST(LegacyPidAlgorithmTest, MeasurementAboveTargetProducesPositiveOutput) {
+TEST(LegacyPidAlgorithmTest, MeasurementAboveTargetProducesNegativeOutput) {
   LegacyPidConfig config;
   config.kp = 2.0;
   config.max_output = 100.0;
@@ -210,7 +212,7 @@ TEST(LegacyPidAlgorithmTest, MeasurementAboveTargetProducesPositiveOutput) {
   const double output =
       pid.Compute({.measurement = 0.32, .target = 0.25, .dt = 0.01});
 
-  EXPECT_GT(output, 0.0);
+  EXPECT_LT(output, 0.0);
 }
 
 TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteRatherThanHipPlusCalf) {

@@ -112,7 +112,7 @@ double LegacyPidAlgorithm::Compute(const PidStepInput& input) {
   const double dt = input.dt;
   measure_ = input.measurement;
   reference_ = input.target;
-  error_ = measure_ - reference_;
+  error_ = reference_ - measure_;
 
   if (std::abs(error_) > deadband_) {
     p_out_ = kp_ * error_;
@@ -133,7 +133,7 @@ double LegacyPidAlgorithm::Compute(const PidStepInput& input) {
     }
 
     if (improve_ & kPidDerivativeOnMeasurement) {
-      d_out_ = kd_ * (last_measure_ - measure_) / dt;
+      d_out_ = kd_ * (measure_ - last_measure_) / dt;
     }
 
     if (improve_ & kPidDerivativeFilter) {
