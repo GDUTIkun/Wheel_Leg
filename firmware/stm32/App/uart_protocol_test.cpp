@@ -649,15 +649,12 @@ extern "C" void UartProtocolTest_FillActuatorCommand(
     }
 
     uint8_t online_mask = BuildOnlineMask();
-    const bool any_motor_offline = (online_mask != 0x3Fu);
     if (command_estop != 0u) {
         g_safety_state = kSafetyStateEstop;
     } else if (timed_out) {
         g_safety_state = kSafetyStateTimeout;
     } else if (command_enable == 0u) {
         g_safety_state = kSafetyStateDisabled;
-    } else if (any_motor_offline) {
-        g_safety_state = kSafetyStateFault;
     } else {
         g_safety_state = kSafetyStateEnabled;
     }
