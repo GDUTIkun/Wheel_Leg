@@ -70,6 +70,13 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_hardware_state_assembler
     ${PROJECT_NAME}_state_assembler)
+
+  ament_add_gtest(test_command_effort_signs
+    test/test_command_effort_signs.cpp
+  )
+  target_include_directories(test_command_effort_signs PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
 endif()
 
 ament_export_dependencies(rclcpp sensor_msgs std_msgs std_srvs wheel_leg_bridge wheel_leg_hw wheel_leg_msgs)

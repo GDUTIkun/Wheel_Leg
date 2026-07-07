@@ -27,6 +27,7 @@
 
 #include "wheel_leg_bridge/message_conversions.hpp"
 #include "wheel_leg_hw/interface_contract.hpp"
+#include "wheel_leg_stm32_bridge/command_effort_signs.hpp"
 #include "wheel_leg_stm32_bridge/hardware_state_assembler.hpp"
 #include "wheel_leg_msgs/msg/control_loop_debug.hpp"
 #include "wheel_leg_msgs/msg/joint_command.hpp"
@@ -52,15 +53,6 @@ constexpr std::size_t kStatePayloadSize =
 constexpr std::size_t kMaxPayloadLen = 160;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDegreesPerRadian = 180.0 / kPi;
-// Maps ROS joint torque semantics to the motor-side polarity expected by STM32.
-constexpr std::array<float, kJointCount> kCommandEffortSigns = {
-    -1.0f,
-    -1.0f,
-    1.0f,
-    1.0f,
-    1.0f,
-    -1.0f,
-};
 
 speed_t ToTermiosBaudRate(int baud_rate) {
   switch (baud_rate) {
