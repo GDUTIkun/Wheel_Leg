@@ -24,9 +24,9 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 
 | 层级 | 职责 | 主要代码 | 当前状态 |
 | --- | --- | --- | --- |
-| 控制阶段门控 | 按传感器、VMC、LQR、航向、抗劈叉、roll 逐段打开控制输出 | `wheel_leg_control` | `[x] 代码已完成，[!] 待实机验证` |
+| 控制阶段门控 | 按传感器、VMC、LQR、航向、抗劈叉、roll 逐段打开控制输出 | `wheel_leg_control` | `[v] LQR+VMC 悬空方向已验证，[~] 落地稳定性待验证` |
 | 仿真参数入口 | 保持仿真全功能默认配置 | `wheel_leg_bringup/config/control_sim.yaml` | `[x] 代码已完成` |
-| 硬件参数入口 | 硬件默认保守配置，所有高风险环节默认关闭 | `wheel_leg_bringup/config/control_hw.yaml` | `[x] 代码已完成，[!] 待实机验证` |
+| 硬件参数入口 | 当前硬件默认进入 LQR 阶段，VMC/LQR/腿长 PID/轮端/髋膝输出均开启，辅助环仍关闭 | `wheel_leg_bringup/config/control_hw.yaml` | `[x] 代码已完成，[~] 落地待验证` |
 | 硬件状态装配 | 将 STM32 absolute 世界角/IMU 数据映射到控制器语义 | `wheel_leg_stm32_bridge/hardware_state_assembler` | `[x] 代码已完成，[!] 待实机验证` |
 | STM32 协议与执行 | 状态帧、命令帧、限幅、斜率、超时、急停 | `wheel_leg_stm32_bridge` / `firmware/stm32` | `[~] 联调中` |
 
@@ -40,21 +40,25 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 - 腿部机构不是串联二连杆，不能使用 `hip_absolute + calf_absolute - pi` 推下连杆角。
 - 腿部几何按实物平行四边形语义计算：`delta = hip_absolute - calf_absolute`，`knee_angle = pi - delta`，`lower_link_absolute = hip_absolute - pi + knee_angle`，再用大小腿三角形求腿对角边 `leg_length` 与世界系腿角 `phi`。
 - `phi_rate` 由修正后的 `phi` 做角度差分和低通滤波。
-- VMC 的髋/膝力矩映射仍需按同一套几何复核，避免 `phi/leg_length` 已修正但雅可比仍沿用旧串联模型。
+- VMC 的髋/膝力矩映射已按同一套几何复核，避免 `phi/leg_length` 已修正但雅可比仍沿用旧串联模型。
 
 ## 3. 控制阶段参数
 
-控制器新增以下参数，仿真默认全开；当前硬件默认配置已收口到“腿长 PID + VMC + 髋膝输出开启，LQR/轮输出关闭”：
+控制器新增以下参数，仿真默认全开；当前硬件默认配置已进入 LQR 阶段：
+
+- 已开启：`VMC`、`LQR`、腿长 PID、轮端输出、髋/膝输出。
+- 仍关闭：航向控制、抗劈叉、roll 补偿。
+- `hw.launch.py` 默认 `command_enable=false`，即 ROS 内部会计算 `/joint_command`，但 bridge 不会向 STM32 下发实际非零力矩，除非显式改为 `command_enable:=true`。
 
 | 参数 | 作用 | 硬件默认 |
 | --- | --- | --- |
 | `enable_vmc` | 启用腿端力/髋力矩到髋膝电机力矩的 VMC 映射 | `true` |
-| `enable_lqr` | 启用 LQR 计算轮端力矩和髋关节虚拟力矩 | `false` |
+| `enable_lqr` | 启用 LQR 计算轮端力矩和髋关节虚拟力矩 | `true` |
 | `enable_leg_length_pid` | 启用腿长 PID 和重力补偿 | `true` |
 | `enable_heading_control` | 启用航向/yaw rate 控制与转向髋前馈 | `false` |
 | `enable_anti_split` | 启用左右腿 `phi` 差的抗劈叉控制 | `false` |
 | `enable_roll_compensation` | 启用 roll 平衡补偿 | `false` |
-| `enable_wheel_output` | 允许发布左右轮力矩 | `false` |
+| `enable_wheel_output` | 允许发布左右轮力矩 | `true` |
 | `enable_hip_output` | 允许发布左右髋力矩 | `true` |
 | `enable_knee_output` | 允许发布左右膝力矩 | `true` |
 | `target_leg_length_min` | 实物侧腿长目标下限，单位 m | `0.15` |
@@ -92,15 +96,16 @@ ros2 launch wheel_leg_bringup hw.launch.py use_controller:=false command_enable:
 - `body_velocity` 与轮子前进方向一致。
 - `/robot_state` 时间戳稳定，控制周期可接近 `0.01s`。
 
-### 4.2 VMC 阶段
+### 4.2 VMC 阶段（已完成）
 
 目标：验证腿长力到髋/膝力矩映射，并完成进入 LQR 前的腿长控制闭环。
 
-当前代码默认模式：
+该阶段的历史验证模式：
 
 - 裸启动 `wheel_leg_controller` 时，默认就是“腿长 PID + VMC”。
 - `hw.launch.py` 对应的 `control_hw.yaml` 也已改成同样配置。
-- 默认保持 `LQR / 航向 / 抗劈叉 / roll / 轮子输出` 全关，只向髋膝发力矩。
+- 当时仅保留腿长 PID、VMC 和髋/膝电机输出，用于单独确认腿长闭环与 VMC 映射。
+- 2026-07-07 当前硬件默认已进入 LQR + VMC 联合阶段：`enable_vmc=true`、`enable_lqr=true`、`enable_wheel_output=true`、`enable_hip_output=true`、`enable_knee_output=true`。
 
 建议参数：
 
@@ -109,13 +114,7 @@ ros2 param set /wheel_leg_controller enable_hip_output true
 ros2 param set /wheel_leg_controller enable_knee_output true
 ```
 
-保持：
-
-- `enable_lqr=false`
-- `enable_wheel_output=false`
-- `enable_heading_control=false`
-- `enable_anti_split=false`
-- `enable_roll_compensation=false`
+该阶段仅作为回溯记录，不作为当前硬件默认配置；当前默认见第 3 节。
 
 确认项：
 
@@ -176,6 +175,35 @@ ros2 param set /wheel_leg_controller enable_wheel_output true
 
 - 优先确认 `pitch`、`pitch_rate`、`phi_rate`、`base_velocity` 和轮端输出符号一致。
 - 若 LQR 打开后出现明显前后冲、轮子快速打满或髋部反向顶杆，先回头检查状态方向和滤波，再继续加大接地时间。
+
+2026-07-07 实机复核结论：
+
+- 本轮复核时必须保持 `command_enable:=false`，只观察 ROS 内部 `/joint_command` 与 debug topic，不让 STM32 执行力矩。
+- MATLAB LQR 状态定义与 C++ 控制状态定义一致，状态顺序保持：
+
+```text
+[phi, phi_rate, distance, velocity, pitch, pitch_rate]
+```
+
+- 这里 `phi` 是腿摆杆角，对应 MATLAB 模型中的 `theta`；`pitch` 是机体倾角，对应 MATLAB 模型中的 `phi/varphi`。不要因为 MATLAB 符号名把两者换位。
+- 本次 hip 力矩过小的真正原因不是状态顺序错，而是 LQR 两路输出语义接错：腿摆杆角恢复量主要在 LQR 第一行输出中，原 C++ 把它接到了 `wheel_torque`，导致送入 VMC 的 `hip_torque` 只有约 `0.03 ~ 0.05 Nm`。
+- 修正后的映射为：LQR 第一行取反后作为 VMC 腿摆杆虚拟力矩，第二行作为 wheel 输出。
+- VMC 映射按二连杆世界角重算腿长与腿角，再从虚拟腿长力/腿摆杆力矩映射到 hip/knee，避免上游 `leg_length/phi` 与关节角口径不一致时缩小 hip 输出。
+- `hw.launch.py` 默认将 `joint_limit_protection.effort_threshold_nm` 设为 `0.0`，关闭 ROS bridge 的本地关节限位保护，避免只观察内部力矩时触发 local estop。
+
+实测验证，`command_enable=false`、限位保护阈值 `0.0`：
+
+```text
+默认 target_phi=97.1 deg，当前 phi_c≈104.48 deg：
+  right_hip≈-2.20 Nm, left_hip≈-1.17 Nm
+  right_knee≈-5.21 Nm, left_knee≈-4.56 Nm
+
+临时 target_phi=115 deg，当前 phi_c≈104.48 deg，即 phi_c < phi_target：
+  right_hip≈+1.89 Nm, left_hip≈+2.85 Nm
+  right_knee≈-2.85 Nm, left_knee≈-2.23 Nm
+```
+
+判据通过：`length_c > length_target` 时 knee 输出较大负力矩；`phi_c < phi_target` 时 hip 输出较大正力矩。
 
 ### 4.4 落地稳定性阶段
 
@@ -292,13 +320,13 @@ colcon --log-base ros2_ws/log test \
 | 控制阶段参数与运行时切换 | `[x]` | 已接入 `wheel_leg_controller` |
 | `RunStandControlStep` 阶段门控 | `[x]` | VMC/LQR/PID/航向/抗劈叉/roll/输出组已可单独关闭 |
 | 仿真参数文件 | `[x]` | `control_sim.yaml` 默认全功能 |
-| 硬件参数文件 | `[x]` | `control_hw.yaml` 当前默认“腿长 PID + VMC + 髋膝输出开，LQR/轮输出关” |
+| 硬件参数文件 | `[x]` | `control_hw.yaml` 当前默认开启 VMC/LQR/腿长 PID，`hw.launch.py` 默认关闭 bridge 本地限位保护 |
 | launch 加载参数 | `[x]` | `sim.launch.py` / `hw.launch.py` 已加载各自参数 |
 | 硬件状态 assembler | `[x]` | 已从 bridge 节点拆出并加测试 |
 | 构建与单元测试 | `[v]` | `wheel_leg_control`、`wheel_leg_stm32_bridge`、`wheel_leg_bringup` 构建通过，新增测试通过 |
 | 传感器阶段实机验证 | `[x]` | 已支撑腿长控制阶段推进，剩余问题转入 LQR 联调中继续复核 |
 | VMC 阶段实机验证 | `[x]` | 腿长控制阶段已完成，当前已进入 LQR |
-| LQR 阶段实机验证 | `[~]` | 当前主线 |
+| LQR 阶段实机验证 | `[~]` | 已完成悬空方向复核：hip/knee 力矩符号与量级符合预期；仍需轻触地/落地验证 |
 | 落地稳定性验证 | `[ ]` | 待现场测试 |
 | 航向+抗劈叉验证 | `[ ]` | 待现场测试 |
 | roll 补偿验证 | `[ ]` | 待现场测试 |

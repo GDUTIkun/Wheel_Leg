@@ -402,6 +402,24 @@ x[4] = pitch
 x[5] = pitch_rate
 ```
 
+注意这里的 `phi` 是腿摆杆角，对应 MATLAB 推导中的 `theta`；`pitch`
+是机体倾角，对应 MATLAB 推导中的 `phi/varphi`。不要按符号名直觉把
+两者换位。2026-07-07 实机复核中曾误判为状态顺序错，实际 C++ 原状态
+顺序与 MATLAB 模型一致。
+
+LQR 输出通道也必须和 MATLAB 模型语义对应。当前 `LQR_K.m` 的两行输出
+不能简单按旧 C++ 的 `wheel_torque, hip_torque` 理解；实机复核确认腿摆杆角
+恢复量主要在第一行输出中。当前控制中采用：
+
+```text
+wheel_torque = lqr_output[1]
+hip_virtual_torque_for_vmc = -lqr_output[0]
+```
+
+这次问题的直接现象是：`phi_c < phi_target` 时，旧映射下 hip 只有
+`0.03 ~ 0.05 Nm`，而较大的恢复量跑到了 wheel 输出；修正后同一工况下
+hip 输出约 `+1.9 ~ +2.9 Nm`，knee 在 `length_c > length_target` 时保持负力矩。
+
 传感器输出必须严格对应这个顺序。尤其要避免以下错配：
 
 ```text
