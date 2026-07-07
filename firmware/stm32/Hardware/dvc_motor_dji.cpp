@@ -63,7 +63,7 @@ void MapGIM6010AngleToLegFrame(const Enum_Motor_DJI_ID can_id,
     switch (can_id)
     {
     case CAN_Motor_ID_0x4E:
-        *mapped_angle = NormalizeAnglePositive(-motor_angle + 135.3688f * kDegToRad);
+        *mapped_angle = NormalizeAnglePositive(-motor_angle + 190.81f * kDegToRad);
         *mapped_omega = -motor_omega;
         g_left_hip_world_angle = *mapped_angle;
         g_left_hip_world_omega = *mapped_omega;

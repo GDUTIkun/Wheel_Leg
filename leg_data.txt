@@ -1,7 +1,7 @@
 deg 为单位
 
-l_hip_angele -55.4412
-l_right_angel 63.052
+l_hip_angele -42.795
+r_hip_angel 63.052
 此时在世界坐标系相对于水平线的角度为：190.81
 
 l_knee_angle  -4.631  

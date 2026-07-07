@@ -225,7 +225,7 @@ class ControllerNode : public rclcpp::Node {
     target_leg_length_max_ =
         declare_parameter<double>("target_leg_length_max", 0.33);
     target_phi_deg_ =
-        declare_parameter<double>("target_phi_deg", 97.1);
+        declare_parameter<double>("target_phi_deg", 70.0);
     target_phi_min_deg_ =
         declare_parameter<double>("target_phi_min_deg", 30.0);
     target_phi_max_deg_ =

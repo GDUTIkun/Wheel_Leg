@@ -48,7 +48,7 @@ void Car_Init(void)
 
     motor_3508_L.Init(&hfdcan1, Motor_DJI_ID_0x202);
     motor_3508_R.Init(&hfdcan1, Motor_DJI_ID_0x201);
-    motor_GIM6010_L_hip.Init(&hfdcan1, CAN_Motor_ID_0x4E, 0.0f);
+    motor_GIM6010_L_hip.Init(&hfdcan1, CAN_Motor_ID_0x4E, -42.795f * PI / 180.0f);
     motor_GIM6010_L_knee.Init(&hfdcan1, CAN_Motor_ID_0x6E, 0.0f);
     motor_GIM6010_R_hip.Init(&hfdcan1, CAN_Motor_ID_0x2E, 0.0f);
     motor_GIM6010_R_knee.Init(&hfdcan1, CAN_Motor_ID_0x8E, 0.0f);

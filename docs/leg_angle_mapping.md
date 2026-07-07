@@ -5,7 +5,7 @@
 `leg_data.txt` 记录了一组实机姿态标定数据，单位为 `deg`：
 
 ```text
-l_hip_angle  = -55.4412
+l_hip_angle  = -42.795
 r_hip_angle  =  63.052
 world angle  = 190.81
 
@@ -96,7 +96,8 @@ CAN_Motor_ID_0x8E: right knee
 映射公式，角度单位为 `deg`：
 
 ```text
-left_hip_world  = normalize_0_360(-left_hip_motor + 135.3688)
+left_hip_motor_zero = -42.795
+left_hip_world      = normalize_0_360(-(left_hip_motor - left_hip_motor_zero) + 190.81)
 right_hip_world = normalize_0_360(right_hip_motor + 127.758)
 
 left_knee_world  = normalize_0_360(left_hip_world - left_knee_motor - 68.491)
@@ -106,7 +107,8 @@ right_knee_world = normalize_0_360(right_hip_world + right_knee_motor - 68.538)
 这里的常数就是当前安装状态下的偏置。左右髋、左膝和右膝均已按现场观测修正：
 
 ```text
-left_hip_offset   = 190.81 + (-55.4412) = 135.3688
+left_hip_motor_zero = -42.795
+left_hip_world_zero = 190.81
 right_hip_offset  = 190.81 - 63.052     = 127.758
 left_knee_offset  = -63.86 + (-4.631)   = -68.491
 right_knee_offset = -63.86 - 4.678      = -68.538
@@ -115,7 +117,7 @@ right_knee_offset = -63.86 - 4.678      = -68.538
 代入 `leg_data.txt` 新标定：
 
 ```text
-left_hip_world  = -(-55.4412) + 135.3688 = 190.81
+left_hip_world  = -(-42.795 - (-42.795)) + 190.81 = 190.81
 right_hip_world = 63.052 + 127.758       = 190.81
 
 left_knee_relative  = -(-4.631) - 68.491 = -63.86
