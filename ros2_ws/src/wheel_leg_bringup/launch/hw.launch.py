@@ -34,7 +34,7 @@ def generate_launch_description():
             DeclareLaunchArgument("publish_joint_states", default_value="true"),
             DeclareLaunchArgument(
                 "joint_limit_protection.effort_threshold_nm",
-                default_value="3.0",
+                default_value="0.0",
             ),
             DeclareLaunchArgument(
                 "control_params",

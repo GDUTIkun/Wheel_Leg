@@ -8,12 +8,12 @@ wheel_leg_controller:
     enable_heading_control: false
     enable_anti_split: false
     enable_roll_compensation: false
-    enable_wheel_output: false
+    enable_wheel_output: true
     enable_hip_output: true
     enable_knee_output: true
     hip_effort_limit: 10.0
     knee_effort_limit: 10.0
-    wheel_effort_limit: 1.0
+    wheel_effort_limit: 5.0
     expected_dt_sec: 0.005
     accepted_dt_tolerance_sec: 0.002
     target_leg_length_min: 0.15

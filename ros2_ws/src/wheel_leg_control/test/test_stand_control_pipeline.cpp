@@ -9,6 +9,9 @@
 namespace wheel_leg_control {
 namespace {
 
+constexpr double kThighLength = 0.18;
+constexpr double kCalfLength = 0.225;
+
 double EffortForJoint(
     const wheel_leg_common::ControlCommand& command,
     const std::string& joint_name) {
@@ -18,6 +21,26 @@ double EffortForJoint(
     }
   }
   return 0.0;
+}
+
+double LegLengthForAbsoluteCalf(double hip_absolute, double calf_absolute) {
+  const double x =
+      kThighLength * std::cos(hip_absolute) +
+      kCalfLength * std::cos(calf_absolute);
+  const double y =
+      kThighLength * std::sin(hip_absolute) +
+      kCalfLength * std::sin(calf_absolute);
+  return std::hypot(x, y);
+}
+
+double PhiForAbsoluteCalf(double hip_absolute, double calf_absolute) {
+  const double x =
+      kThighLength * std::cos(hip_absolute) +
+      kCalfLength * std::cos(calf_absolute);
+  const double y =
+      kThighLength * std::sin(hip_absolute) +
+      kCalfLength * std::sin(calf_absolute);
+  return std::atan2(y, x);
 }
 
 class CountingPid final : public PidAlgorithm {
@@ -40,12 +63,13 @@ class CountingPid final : public PidAlgorithm {
 class CountingLqr final : public LqrAlgorithm {
  public:
   LqrControlOutput Compute(const LqrStepInput& input) const override {
-    (void)input;
+    last_input = input;
     ++calls;
     return {.wheel_torque = 3.0, .hip_torque = 4.0};
   }
 
   mutable int calls = 0;
+  mutable LqrStepInput last_input;
 };
 
 class CountingVmc final : public VmcAlgorithm {
@@ -192,6 +216,44 @@ TEST(StandControlPipelineTest, LegLengthForceIncludesGravityCompensation) {
                        outputs.leg_length_gravity_compensation);
 }
 
+TEST(StandControlPipelineTest, LqrStateOrderMatchesMatlabModel) {
+  PipelineFixture fixture;
+  fixture.targets.target_pitch = 0.12;
+  fixture.targets.target_phi = 1.7;
+  fixture.state.right_leg.leg_length = 0.31;
+  fixture.state.right_leg.phi = 1.9;
+  fixture.state.right_leg.phi_rate = 0.8;
+  fixture.state.body.pitch = -0.2;
+  fixture.state.body.pitch_rate = -0.4;
+  fixture.state.body.distance = 0.5;
+  fixture.state.body.velocity = -0.6;
+  StandControlStageConfig config;
+  config.enable_vmc = false;
+  config.enable_leg_length_pid = false;
+  config.enable_heading_control = false;
+  config.enable_anti_split = false;
+  config.enable_roll_compensation = false;
+
+  (void)RunStandControlStep(
+      1.0, 0.01, fixture.targets, fixture.state, 1.0, config,
+      fixture.algorithms);
+
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[0], fixture.state.right_leg.phi);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[1],
+                   fixture.state.right_leg.phi_rate);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[2],
+                   fixture.state.body.distance);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[3],
+                   fixture.state.body.velocity);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[4],
+                   fixture.state.body.pitch);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.state[5],
+                   fixture.state.body.pitch_rate);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.target[0], fixture.targets.target_phi);
+  EXPECT_DOUBLE_EQ(fixture.lqr.last_input.target[4],
+                   fixture.targets.target_pitch);
+}
+
 TEST(LegacyPidAlgorithmTest, MeasurementBelowTargetProducesPositiveOutput) {
   LegacyPidConfig config;
   config.kp = 2.0;
@@ -216,23 +278,85 @@ TEST(LegacyPidAlgorithmTest, MeasurementAboveTargetProducesNegativeOutput) {
   EXPECT_LT(output, 0.0);
 }
 
-TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteRatherThanHipPlusCalf) {
+TEST(LegacyLqrAlgorithmTest, LegAngleErrorProducesHipRestoringTorque) {
+  LegacyLqrAlgorithm lqr;
+  const auto output = lqr.Compute({
+      .leg_length = 0.34,
+      .target = {{2.0, 0.0, 0.0, 0.0, 0.0, 0.0}},
+      .state = {{1.8, 0.0, 0.0, 0.0, 0.0, 0.0}},
+  });
+
+  EXPECT_GT(output.hip_torque, 1.0);
+}
+
+TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteAngle) {
   LegacyVmcAlgorithm vmc;
-  const VmcStepInput first{
+  const VmcStepInput input{
       .force = 10.0,
-      .torque = 0.0,
+      .torque = 2.0,
       .leg_length = 0.25,
       .phi = 1.0,
       .hip_absolute = 0.3,
       .calf_absolute = 1.8,
   };
-  VmcStepInput second = first;
-  second.hip_absolute = 0.9;
 
-  const auto first_output = vmc.Compute(first);
-  const auto second_output = vmc.Compute(second);
+  const auto output = vmc.Compute(input);
+  const double leg_length =
+      LegLengthForAbsoluteCalf(input.hip_absolute, input.calf_absolute);
+  const double phi =
+      PhiForAbsoluteCalf(input.hip_absolute, input.calf_absolute);
+  const double expected_knee_torque =
+      kCalfLength *
+      (input.force * std::sin(input.calf_absolute - phi) +
+       input.torque / leg_length * std::cos(input.calf_absolute - phi));
 
-  EXPECT_DOUBLE_EQ(first_output.knee_torque, second_output.knee_torque);
+  EXPECT_NEAR(output.knee_torque, expected_knee_torque, 1e-12);
+}
+
+TEST(LegacyVmcAlgorithmTest,
+     ContractedLegAndPositivePhiTorqueProduceExpectedJointSigns) {
+  LegacyVmcAlgorithm vmc;
+  const double hip_absolute = 0.70;
+  const double calf_absolute = 2.62;
+  const double leg_length =
+      LegLengthForAbsoluteCalf(hip_absolute, calf_absolute);
+  const double phi = PhiForAbsoluteCalf(hip_absolute, calf_absolute);
+
+  const auto length_output = vmc.Compute({
+      .force = -40.0,
+      .torque = 0.0,
+      .leg_length = leg_length,
+      .phi = phi,
+      .hip_absolute = hip_absolute,
+      .calf_absolute = calf_absolute,
+  });
+  EXPECT_LT(length_output.knee_torque, -1.0);
+
+  const auto phi_output = vmc.Compute({
+      .force = 0.0,
+      .torque = 4.0,
+      .leg_length = leg_length,
+      .phi = phi,
+      .hip_absolute = hip_absolute,
+      .calf_absolute = calf_absolute,
+  });
+  EXPECT_GT(phi_output.hip_torque, 1.0);
+}
+
+TEST(LegacyVmcAlgorithmTest, RecomputesPolarStateFromJointAngles) {
+  LegacyVmcAlgorithm vmc;
+  const double requested_phi_torque = 4.0;
+
+  const auto output = vmc.Compute({
+      .force = 0.0,
+      .torque = requested_phi_torque,
+      .leg_length = 0.01,
+      .phi = 0.0,
+      .hip_absolute = 0.70,
+      .calf_absolute = 2.62,
+  });
+
+  EXPECT_NEAR(output.hip_torque, requested_phi_torque, 1e-12);
 }
 
 }  // namespace

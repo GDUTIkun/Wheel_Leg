@@ -17,16 +17,43 @@ struct SerialVmcJointContributions {
   VmcJointTorques torque_only;
 };
 
+struct LegPolarState {
+  double length = 0.0;
+  double phi = 0.0;
+};
+
+LegPolarState ComputeLegPolarState(
+    double thigh_length,
+    double calf_length,
+    double hip_absolute,
+    double calf_absolute) {
+  const double x =
+      thigh_length * std::cos(hip_absolute) +
+      calf_length * std::cos(calf_absolute);
+  const double y =
+      thigh_length * std::sin(hip_absolute) +
+      calf_length * std::sin(calf_absolute);
+  return {
+      .length = std::hypot(x, y),
+      .phi = std::atan2(y, x),
+  };
+}
+
 SerialVmcJointContributions ComputeSerialVmcJointContributions(
     double force,
     double torque,
-    double leg_length,
-    double phi,
+    double /*leg_length*/,
+    double /*phi*/,
     double hip_absolute,
     double calf_absolute) {
-  const double safe_leg_length = std::max(leg_length, 1e-9);
-  const double hip_minus_phi = hip_absolute - phi;
-  const double calf_minus_phi = calf_absolute - phi;
+  const LegPolarState leg = ComputeLegPolarState(
+      kThighLength,
+      kCalfLength,
+      hip_absolute,
+      calf_absolute);
+  const double safe_leg_length = std::max(leg.length, 1e-9);
+  const double hip_minus_phi = hip_absolute - leg.phi;
+  const double calf_minus_phi = calf_absolute - leg.phi;
 
   const double hip_force_column =
       kThighLength * std::sin(hip_minus_phi) +

@@ -93,6 +93,28 @@ double ClampMagnitude(double value, double limit) {
   return std::clamp(value, -limit, limit);
 }
 
+struct LegPolarState {
+  double length = 0.0;
+  double phi = 0.0;
+};
+
+LegPolarState ComputeLegPolarState(
+    double thigh_length,
+    double calf_length,
+    double hip_absolute,
+    double calf_absolute) {
+  const double x =
+      thigh_length * std::cos(hip_absolute) +
+      calf_length * std::cos(calf_absolute);
+  const double y =
+      thigh_length * std::sin(hip_absolute) +
+      calf_length * std::sin(calf_absolute);
+  return {
+      .length = std::hypot(x, y),
+      .phi = std::atan2(y, x),
+  };
+}
+
 }  // namespace
 
 LegacyPidAlgorithm::LegacyPidAlgorithm(const LegacyPidConfig& config)
@@ -202,8 +224,8 @@ LqrControlOutput LegacyLqrAlgorithm::Compute(
 
   LqrControlOutput output;
   output.fly_flag = false;
-  output.wheel_torque = torque[0];
-  output.hip_torque = torque[1];
+  output.wheel_torque = torque[1];
+  output.hip_torque = -torque[0];
   output.torque_magnitude =
       std::hypot(output.wheel_torque, output.hip_torque);
   return output;
@@ -213,10 +235,15 @@ VmcJointTorques LegacyVmcAlgorithm::Compute(
     const VmcStepInput& input) const {
   constexpr double kThighLength = 9.0 / 5.0e+1;
   constexpr double kCalfLength = 9.0 / 4.0e+1;
+  const LegPolarState leg = ComputeLegPolarState(
+      kThighLength,
+      kCalfLength,
+      input.hip_absolute,
+      input.calf_absolute);
   const double leg_length =
-      std::max(input.leg_length, std::numeric_limits<double>::epsilon());
-  const double hip_minus_phi = input.hip_absolute - input.phi;
-  const double calf_minus_phi = input.calf_absolute - input.phi;
+      std::max(leg.length, std::numeric_limits<double>::epsilon());
+  const double hip_minus_phi = input.hip_absolute - leg.phi;
+  const double calf_minus_phi = input.calf_absolute - leg.phi;
   const double calf_projection =
       input.force * std::sin(calf_minus_phi) +
       input.torque / leg_length * std::cos(calf_minus_phi);
