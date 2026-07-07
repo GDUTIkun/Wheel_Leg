@@ -11,6 +11,7 @@ wheel_leg_controller:
     enable_wheel_output: true
     enable_hip_output: true
     enable_knee_output: true
+    phi_rate_damping_kd: -0.2
     hip_effort_limit: 10.0
     knee_effort_limit: 10.0
     wheel_effort_limit: 5.0

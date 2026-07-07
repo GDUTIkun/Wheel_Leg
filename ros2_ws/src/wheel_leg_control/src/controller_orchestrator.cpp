@@ -65,6 +65,10 @@ void ControllerOrchestrator::SetTurnHipFeedforwardScale(double scale) {
   runtime_.set_turn_hip_feedforward_scale(scale);
 }
 
+void ControllerOrchestrator::SetPhiRateDampingKd(double kd) {
+  lqr_algorithm_.SetPhiRateDampingKd(kd);
+}
+
 void ControllerOrchestrator::SetStageConfig(
     const StandControlStageConfig& config) {
   runtime_.set_stage_config(config);

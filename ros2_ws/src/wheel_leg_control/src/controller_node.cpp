@@ -218,6 +218,9 @@ class ControllerNode : public rclcpp::Node {
         declare_parameter<double>("yaw_rate_assist_scale", 0.0);
     turn_hip_feedforward_scale_ = declare_parameter<double>(
         "turn_hip_feedforward_scale", DefaultTurnHipFeedforwardScale());
+    phi_rate_damping_kd_ = declare_parameter<double>(
+        "phi_rate_damping_kd",
+        DefaultLegacyLqrConfig().phi_rate_damping_kd);
     body_height_offset_scale_ =
         declare_parameter<double>("body_height_offset_scale", 0.2);
     target_leg_length_min_ =
@@ -225,7 +228,7 @@ class ControllerNode : public rclcpp::Node {
     target_leg_length_max_ =
         declare_parameter<double>("target_leg_length_max", 0.33);
     target_phi_deg_ =
-        declare_parameter<double>("target_phi_deg", 70.0);
+        declare_parameter<double>("target_phi_deg", 90.0);
     target_phi_min_deg_ =
         declare_parameter<double>("target_phi_min_deg", 30.0);
     target_phi_max_deg_ =
@@ -274,6 +277,7 @@ class ControllerNode : public rclcpp::Node {
     latest_control_mode_ = kModeStand;
     orchestrator_.ConfigurePidDefaults(pid_defaults_);
     orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
+    orchestrator_.SetPhiRateDampingKd(phi_rate_damping_kd_);
     orchestrator_.SetStageConfig(stage_config_);
     parameter_callback_handle_ = add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter>& parameters) {
@@ -409,6 +413,7 @@ class ControllerNode : public rclcpp::Node {
     double next_leg_length_ref_lpf_rc = leg_length_ref_lpf_rc_;
     double next_yaw_rate_assist_scale = yaw_rate_assist_scale_;
     double next_turn_hip_feedforward_scale = turn_hip_feedforward_scale_;
+    double next_phi_rate_damping_kd = phi_rate_damping_kd_;
     double next_expected_dt_sec = expected_dt_sec_;
     double next_accepted_dt_tolerance_sec = accepted_dt_tolerance_sec_;
     StandControlStageConfig next_stage_config = stage_config_;
@@ -603,6 +608,16 @@ class ControllerNode : public rclcpp::Node {
         }
         continue;
       }
+
+      if (parameter.get_name() == "phi_rate_damping_kd") {
+        next_phi_rate_damping_kd = parameter.as_double();
+        if (!std::isfinite(next_phi_rate_damping_kd)) {
+          result.successful = false;
+          result.reason = "phi_rate_damping_kd must be finite";
+          return result;
+        }
+        continue;
+      }
     }
 
     if (next_target_phi_min_deg > next_target_phi_max_deg) {
@@ -626,6 +641,7 @@ class ControllerNode : public rclcpp::Node {
     leg_length_ref_lpf_rc_ = next_leg_length_ref_lpf_rc;
     yaw_rate_assist_scale_ = next_yaw_rate_assist_scale;
     turn_hip_feedforward_scale_ = next_turn_hip_feedforward_scale;
+    phi_rate_damping_kd_ = next_phi_rate_damping_kd;
     expected_dt_sec_ = next_expected_dt_sec;
     accepted_dt_tolerance_sec_ = next_accepted_dt_tolerance_sec;
     const bool stage_config_changed =
@@ -645,6 +661,7 @@ class ControllerNode : public rclcpp::Node {
         next_stage_config.enable_knee_output != stage_config_.enable_knee_output;
     stage_config_ = next_stage_config;
     orchestrator_.SetTurnHipFeedforwardScale(turn_hip_feedforward_scale_);
+    orchestrator_.SetPhiRateDampingKd(phi_rate_damping_kd_);
     orchestrator_.SetStageConfig(stage_config_);
     if (stage_config_changed) {
       RCLCPP_WARN(
@@ -1609,6 +1626,7 @@ class ControllerNode : public rclcpp::Node {
   double target_yaw_rate_scale_ = 0.0;
   double yaw_rate_assist_scale_ = 0.0;
   double turn_hip_feedforward_scale_ = DefaultTurnHipFeedforwardScale();
+  double phi_rate_damping_kd_ = DefaultLegacyLqrConfig().phi_rate_damping_kd;
   double body_height_offset_scale_ = 0.0;
   double target_leg_length_min_ = 0.0;
   double target_leg_length_max_ = 0.0;

@@ -289,6 +289,38 @@ TEST(LegacyLqrAlgorithmTest, LegAngleErrorProducesHipRestoringTorque) {
   EXPECT_GT(output.hip_torque, 1.0);
 }
 
+TEST(LegacyLqrAlgorithmTest, ScalesPhiAndPhiRateGainsOnlyOnHipTorque) {
+  LegacyLqrAlgorithm lqr;
+  const auto output = lqr.Compute({
+      .leg_length = 0.34,
+      .target = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}},
+      .state = {{0.2, -0.3, 0.0, 0.0, 0.0, 0.0}},
+  });
+
+  EXPECT_NEAR(output.hip_torque, -1.1562960769438149, 1e-12);
+  EXPECT_NEAR(output.wheel_torque, -0.010310519746996817, 1e-12);
+}
+
+TEST(LegacyLqrAlgorithmTest, AddsPhiRateDampingOnlyToHipTorque) {
+  LegacyLqrAlgorithm base_lqr;
+  LegacyLqrAlgorithm damped_lqr({
+      .phi_rate_damping_kd = 2.5,
+  });
+  const LqrStepInput input{
+      .leg_length = 0.34,
+      .target = {{2.0, 0.0, 0.1, 0.0, 0.0, 0.0}},
+      .state = {{1.8, 0.6, 0.2, -0.1, 0.05, -0.02}},
+  };
+
+  const auto base_output = base_lqr.Compute(input);
+  const auto damped_output = damped_lqr.Compute(input);
+
+  EXPECT_NEAR(damped_output.hip_torque,
+              base_output.hip_torque + input.state[1] * 2.5,
+              1e-12);
+  EXPECT_NEAR(damped_output.wheel_torque, base_output.wheel_torque, 1e-12);
+}
+
 TEST(LegacyVmcAlgorithmTest, KneeTorqueUsesCalfAbsoluteAngle) {
   LegacyVmcAlgorithm vmc;
   const VmcStepInput input{

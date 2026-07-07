@@ -14,6 +14,7 @@ constexpr std::uint32_t kPidTrapezoidIntegral = 0b00000100;
 constexpr std::uint32_t kPidOutputFilter = 0b00010000;
 constexpr std::uint32_t kPidChangingIntegrationRate = 0b00100000;
 constexpr std::uint32_t kPidDerivativeFilter = 0b01000000;
+constexpr double kLqrPhiGainScale = 0.6;
 
 using LqrGain = std::array<std::array<double, 6>, 2>;
 
@@ -84,7 +85,7 @@ LqrGain LegacyLqrK(double leg_length) {
                       1.878260401896025;
 
   return {{
-      {{mt1, mt3, mt5, mt7, mt9, mt11}},
+      {{mt1 * kLqrPhiGainScale, mt3 * kLqrPhiGainScale, mt5, mt7, mt9, mt11}},
       {{mt2, mt4, mt6, mt8, mt10, mt12}},
   }};
 }
@@ -216,6 +217,9 @@ void LegacyPidAlgorithm::Reset(double measurement, double target) {
   last_d_out_ = 0.0;
 }
 
+LegacyLqrAlgorithm::LegacyLqrAlgorithm(const LegacyLqrConfig& config)
+    : phi_rate_damping_kd_(config.phi_rate_damping_kd) {}
+
 LqrControlOutput LegacyLqrAlgorithm::Compute(
     const LqrStepInput& input) const {
   const std::array<double, 2> torque =
@@ -225,10 +229,14 @@ LqrControlOutput LegacyLqrAlgorithm::Compute(
   LqrControlOutput output;
   output.fly_flag = false;
   output.wheel_torque = torque[1];
-  output.hip_torque = -torque[0];
+  output.hip_torque = -torque[0] + input.state[1] * phi_rate_damping_kd_;
   output.torque_magnitude =
       std::hypot(output.wheel_torque, output.hip_torque);
   return output;
+}
+
+void LegacyLqrAlgorithm::SetPhiRateDampingKd(double kd) {
+  phi_rate_damping_kd_ = kd;
 }
 
 VmcJointTorques LegacyVmcAlgorithm::Compute(

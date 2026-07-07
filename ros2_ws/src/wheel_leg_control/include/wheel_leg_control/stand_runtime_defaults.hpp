@@ -28,6 +28,10 @@ struct StandLegacyPidDefaults {
   LegacyPidConfig roll_balance;
 };
 
+struct LegacyLqrConfig {
+  double phi_rate_damping_kd = 0.0;
+};
+
 constexpr double DegreesToRadians(double degrees) {
   return degrees * 3.14159265358979323846 / 180.0;
 }
@@ -40,9 +44,9 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
   return {
       .leg_length =
           {
-              .kp = 380.0,
+              .kp = 250.0,
               .ki = 0.0,
-              .kd = -18.0,
+              .kd = -13.0,
               .max_output = 500.0,
               .deadband = 0.0001,
               .improvement_flags = 0b01100010,
@@ -94,6 +98,12 @@ inline StandLegacyPidDefaults DefaultStandLegacyPidDefaults() {
               .output_lpf_rc = 0.01,
               .derivative_lpf_rc = 0.01,
           },
+  };
+}
+
+inline LegacyLqrConfig DefaultLegacyLqrConfig() {
+  return {
+      .phi_rate_damping_kd = 0.0,
   };
 }
 

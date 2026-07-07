@@ -46,7 +46,14 @@ class LegacyPidAlgorithm : public PidAlgorithm {
 
 class LegacyLqrAlgorithm : public LqrAlgorithm {
  public:
+  explicit LegacyLqrAlgorithm(
+      const LegacyLqrConfig& config = DefaultLegacyLqrConfig());
+
   LqrControlOutput Compute(const LqrStepInput& input) const override;
+  void SetPhiRateDampingKd(double kd);
+
+ private:
+  double phi_rate_damping_kd_ = 0.0;
 };
 
 class LegacyVmcAlgorithm : public VmcAlgorithm {
