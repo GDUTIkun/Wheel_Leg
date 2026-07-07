@@ -8,7 +8,7 @@ namespace wheel_leg_stm32_bridge {
 // Maps ROS joint torque semantics to the motor-side polarity validated on
 // hardware during the single-joint probe test sequence.
 inline constexpr std::array<float, 6> kCommandEffortSigns = {
-    1.0f,
+    -1.0f,
     1.0f,
     -1.0f,
     1.0f,

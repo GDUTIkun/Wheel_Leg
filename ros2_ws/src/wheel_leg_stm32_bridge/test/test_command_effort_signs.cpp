@@ -7,7 +7,7 @@ namespace {
 
 TEST(CommandEffortSignsTest, MatchesValidatedHardwarePolarity) {
   constexpr std::array<float, 6> kExpectedSigns = {
-      1.0f,
+      -1.0f,
       1.0f,
       -1.0f,
       1.0f,
