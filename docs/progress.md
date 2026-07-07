@@ -49,7 +49,8 @@
 - 当前硬件默认控制：`enable_vmc=true`、`enable_lqr=true`、`enable_leg_length_pid=true`、`enable_wheel_output=true`、`enable_hip_output=true`、`enable_knee_output=true`。
 - 当前仍关闭的辅助环：`enable_heading_control=false`、`enable_anti_split=false`、`enable_roll_compensation=false`。
 - 安全口径：`hw.launch.py` 默认 `command_enable=false`；ROS bridge 本地关节限位保护阈值默认为 `0.0`，即关闭本地限位保护。真正上电输出前仍必须显式确认 `command_enable`。
-- 当前下一步：在低限幅和可急停条件下做轻触地/短时落地验证，重点看 `pitch/pitch_rate/base_velocity`、轮端方向、IMU 方向和是否出现高频震荡。
+- 当前新增问题：`left_hip` 在实机输出打开后存在单侧抖动；右腿可正常控，左腿在实际 `phi` 接近当前 `phi_target` 时更容易触发高频抖动，改变 `phi_target` 后抖动区间会跟随目标移动。
+- 当前下一步：优先定位目标附近左腿局部闭环振荡来源，重点看左腿 `phi_rate` / 关节速度、LQR 阻尼项、执行死区/回差，继续在低限幅和可急停条件下验证状态与输出。
 
 本轮已定位并修复的问题：
 
@@ -58,6 +59,7 @@
 - hip 力矩过小的原因是 LQR 两路输出语义接错：腿摆杆恢复量在 LQR 第一行，原先被接到 wheel，导致 VMC 收到的 hip 虚拟转矩只有 `0.03 ~ 0.05 Nm`。
 - 当前修正为 `wheel_torque = lqr_output[1]`，`hip_virtual_torque_for_vmc = -lqr_output[0]`。
 - VMC 已改为按二连杆世界角重算腿长和腿摆杆角，再映射虚拟腿长力/腿摆杆力矩到 hip/knee。
+- ROS bridge 下行力矩极性已再次按单关节 probe 复核，当前左腿 `left_hip`、`left_knee` 命令极性均取反后与实物方向一致。
 
 最近一次 `command_enable=false` 实测：
 
@@ -69,6 +71,33 @@
 临时 target_phi=115 deg，当前 phi_c≈104.48 deg，即 phi_c < phi_target：
   right_hip≈+1.89 Nm, left_hip≈+2.85 Nm
   right_knee≈-2.85 Nm, left_knee≈-2.23 Nm
+```
+
+2026-07-07 左腿抖动补充结论：
+
+```text
+- 现象：
+  - right_leg 可正常跟踪，left_hip 在输出打开后更容易抖动。
+  - 只手动向 `phi` 增大方向拉左腿时，更容易触发抖动。
+  - 修改 `phi_target` 后，抖动不是固定出现在某个绝对角度，而是在实际 `phi` 接近新的 `phi_target` 附近出现。
+- 已排除：
+  - left_hip / left_knee 下行力矩极性已通过单关节 probe 修正。
+  - 左腿 `phi`、`phi_rate` 主方向与关节速度主方向大体一致，不是整条状态链完全反号。
+- 当前观测：
+  - 记录脚本：tools/left_leg_oscillation_capture.py
+  - `phi_increasing` 样本中：
+    left_phi_rate max ≈ 6.00 rad/s
+    left_phi_rate_raw max ≈ 10.13 rad/s
+    raw_left_hip_vel max ≈ 7.32 rad/s
+    raw_left_knee_vel max ≈ 8.19 rad/s
+  - 同时右腿基本接近静止：
+    right_phi_rate mean ≈ -0.013 rad/s
+    raw_right_hip_vel mean ≈ -0.018 rad/s
+- 当前判断：
+  - 控制器在 `phi` 增大时对 left_hip 的恢复力矩方向是对的，不像单纯极性错误。
+  - 因抖动区间会随 `phi_target` 移动，当前不再优先认为是某个固定机械角度点的问题。
+  - 更像目标附近的局部闭环振荡：左腿速度状态过大/过吵、LQR 阻尼项过激、执行死区/回差或小范围静摩擦释放均需排查。
+  - 下一步优先拆解 left_phi_rate 的来源，并在接近 `phi_target` 的小扰动窗口内对比 left/right 的 `phi_rate`、`cmd_hip` 与实际关节速度。
 ```
 
 `iter-005` 不关注：

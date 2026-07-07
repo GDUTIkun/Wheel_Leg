@@ -226,6 +226,23 @@ ros2 param set /wheel_leg_controller enable_wheel_output true
 
 若出现 pitch 高频震荡，优先检查 IMU 方向、gyro 滤波、`phi_rate`、`base_velocity` 和执行器斜率限制。
 
+2026-07-07 左腿单侧抖动实测补充：
+
+- 当前右腿可正常控，左腿在 `phi` 增大方向更容易触发高频抖动。
+- 调整 `phi_target` 后，抖动区间会跟随目标移动，不是固定出现在某个绝对机械角度。
+- 单关节 probe 已确认左腿 `left_hip` / `left_knee` 下行力矩极性修正后与实物动作方向一致，因此当前问题不优先归因于命令极性。
+- 采集脚本：`tools/left_leg_oscillation_capture.py`
+- 当前实测中，`phi_increasing` 阶段左腿速度状态显著大于右腿：
+  - `left_phi_rate max ≈ 6.00 rad/s`
+  - `left_phi_rate_raw max ≈ 10.13 rad/s`
+  - `raw_left_hip_vel max ≈ 7.32 rad/s`
+  - `raw_left_knee_vel max ≈ 8.19 rad/s`
+  - 同时 `right_phi_rate mean ≈ -0.013 rad/s`
+- 当前优先级最高的排查方向：
+  - 接近 `phi_target` 时，左腿 `phi_rate` 是否被髋/膝某一路速度单边放大
+  - LQR 速度反馈或 VMC 映射在目标附近是否过激
+  - 左腿执行侧是否存在死区、回差、静摩擦释放或线束干涉，导致目标附近小范围来回打
+
 ### 4.5 航向与抗劈叉阶段
 
 目标：在基础站立可控后启用方向控制和左右腿约束。
