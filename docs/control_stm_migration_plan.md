@@ -61,6 +61,7 @@ backend -> /robot_state -> wheel_leg_controller -> /joint_command -> backend
 | `enable_wheel_output` | 允许发布左右轮力矩 | `true` |
 | `enable_hip_output` | 允许发布左右髋力矩 | `true` |
 | `enable_knee_output` | 允许发布左右膝力矩 | `true` |
+| `phi_rate_damping_kd` | 在 LQR 髋部虚拟力矩处追加 `phi_rate * kd`，不作用于轮端力矩 | `-0.2` |
 | `target_leg_length_min` | 实物侧腿长目标下限，单位 m | `0.15` |
 | `target_leg_length_max` | 实物侧腿长目标上限，单位 m | `0.32` |
 | `target_phi_min_deg` | 实物侧腿角目标下限，单位 deg | `30.0` |
@@ -205,6 +206,13 @@ ros2 param set /wheel_leg_controller enable_wheel_output true
 
 判据通过：`length_c > length_target` 时 knee 输出较大负力矩；`phi_c < phi_target` 时 hip 输出较大正力矩。
 
+2026-07-07 LQR 调参收口：
+
+- LQR 状态顺序和输出语义冻结：状态仍为 `[phi, phi_rate, distance, velocity, pitch, pitch_rate]`，第一行取反后作为 VMC 腿摆杆虚拟力矩，第二行作为轮端输出。
+- 为降低目标附近腿角闭环激进程度，LQR 第一行中的 `phi` 与 `phi_rate` 两项增益统一乘以 `0.6`；轮端输出行的 `phi` / `phi_rate` 增益不乘该系数。
+- 额外 `phi_rate_damping_kd` 只加在 LQR 髋部虚拟力矩处，当前硬件默认 `-0.2`。该项不进入 `wheel_torque`，避免把腿角速度阻尼混到轮端平衡力矩。
+- 本轮不再继续扩大 LQR 增益调参范围。后续轻触地/落地测试若仍出现局部振荡，优先从速度估计质量、执行死区/回差、静摩擦释放、线束干涉和限幅/斜率限制排查；只有在这些现象被复核后再重新打开 LQR 增益调整。
+
 ### 4.4 落地稳定性阶段
 
 目标：在低限幅下验证基础站立稳定性。
@@ -343,7 +351,7 @@ colcon --log-base ros2_ws/log test \
 | 构建与单元测试 | `[v]` | `wheel_leg_control`、`wheel_leg_stm32_bridge`、`wheel_leg_bringup` 构建通过，新增测试通过 |
 | 传感器阶段实机验证 | `[x]` | 已支撑腿长控制阶段推进，剩余问题转入 LQR 联调中继续复核 |
 | VMC 阶段实机验证 | `[x]` | 腿长控制阶段已完成，当前已进入 LQR |
-| LQR 阶段实机验证 | `[~]` | 已完成悬空方向复核：hip/knee 力矩符号与量级符合预期；仍需轻触地/落地验证 |
+| LQR 阶段实机验证 | `[~]` | 已完成悬空方向复核并收口本轮 LQR 调参；仍需轻触地/落地验证 |
 | 落地稳定性验证 | `[ ]` | 待现场测试 |
 | 航向+抗劈叉验证 | `[ ]` | 待现场测试 |
 | roll 补偿验证 | `[ ]` | 待现场测试 |

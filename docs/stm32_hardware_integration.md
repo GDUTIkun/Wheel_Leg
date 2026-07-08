@@ -424,3 +424,34 @@ ros2 run wheel_leg_stm32_bridge joint_command_probe_node --ros-args \
 ```
 
 当前这条保护的目的不是替代 STM32 侧安全停机，而是在 ROS 侧增加一层“到限位仍持续顶力矩”的联调保护，降低悬空调试和轻触地调试阶段的风险。
+
+### 9.13 2026-07-07 LQR 调参收口记录
+
+本轮在 LQR + VMC 悬空方向复核完成后，对目标附近腿角闭环做保守化处理，并结束本轮 LQR 调参。
+
+记录如下：
+
+```text
+- 日期：2026-07-07
+- 修改位置：
+  ros2_ws/src/wheel_leg_control/src/legacy_algorithms.cpp
+  ros2_ws/src/wheel_leg_control/src/controller_node.cpp
+  ros2_ws/src/wheel_leg_bringup/config/control_hw.yaml
+- LQR 状态顺序：
+  [phi, phi_rate, distance, velocity, pitch, pitch_rate]
+- 输出语义：
+  - 第一行取反后作为 VMC 腿摆杆虚拟力矩
+  - 第二行作为轮端力矩
+- 调参收口：
+  - 髋部输出行的 phi / phi_rate 增益乘 0.6
+  - 轮端输出行不乘该系数
+  - 新增 phi_rate_damping_kd，硬件默认 -0.2
+  - phi_rate_damping_kd 只追加到髋部虚拟力矩，不作用于轮端力矩
+- 验证：
+  - wheel_leg_control 单元测试通过
+  - 新增测试覆盖“phi/phi_rate 缩放只影响髋部输出行”和“phi_rate_damping_kd 不影响 wheel_torque”
+- 结论：
+  - 本轮 LQR 调参结束
+  - 后续轻触地/落地阶段不继续盲目改 LQR 增益
+  - 若仍有目标附近局部抖动，优先查速度估计、执行死区/回差、静摩擦释放、线束干涉、限幅和斜率限制
+```

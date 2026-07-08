@@ -47,10 +47,11 @@
 - 腿长控制：腿长 PID + VMC 阶段已完成，`length_c > length_target` 时 knee 输出较大负力矩。
 - LQR + VMC：悬空方向复核已完成，`phi_c < phi_target` 时 hip 输出较大正力矩。
 - 当前硬件默认控制：`enable_vmc=true`、`enable_lqr=true`、`enable_leg_length_pid=true`、`enable_wheel_output=true`、`enable_hip_output=true`、`enable_knee_output=true`。
+- LQR 调参状态：本轮已收口；`phi` / `phi_rate` 髋部增益按 `0.6` 缩放，`phi_rate_damping_kd=-0.2` 仅作用于髋部虚拟力矩，轮端力矩不叠加该项。
 - 当前仍关闭的辅助环：`enable_heading_control=false`、`enable_anti_split=false`、`enable_roll_compensation=false`。
 - 安全口径：`hw.launch.py` 默认 `command_enable=false`；ROS bridge 本地关节限位保护阈值默认为 `0.0`，即关闭本地限位保护。真正上电输出前仍必须显式确认 `command_enable`。
 - 当前新增问题：`left_hip` 在实机输出打开后存在单侧抖动；右腿可正常控，左腿在实际 `phi` 接近当前 `phi_target` 时更容易触发高频抖动，改变 `phi_target` 后抖动区间会跟随目标移动。
-- 当前下一步：优先定位目标附近左腿局部闭环振荡来源，重点看左腿 `phi_rate` / 关节速度、LQR 阻尼项、执行死区/回差，继续在低限幅和可急停条件下验证状态与输出。
+- 当前下一步：在冻结本轮 LQR 参数的前提下进入轻触地/落地稳定性验证；若左腿目标附近仍抖动，优先看左腿 `phi_rate` / 关节速度估计质量、执行死区/回差、静摩擦释放、线束干涉和输出限幅/斜率限制。
 
 本轮已定位并修复的问题：
 
@@ -58,6 +59,8 @@
 - MATLAB 中 `theta` 是腿摆杆角，对应 C++ 的 `leg.phi`；MATLAB 中 `phi/varphi` 是机体倾角，对应 C++ 的 `body.pitch`。
 - hip 力矩过小的原因是 LQR 两路输出语义接错：腿摆杆恢复量在 LQR 第一行，原先被接到 wheel，导致 VMC 收到的 hip 虚拟转矩只有 `0.03 ~ 0.05 Nm`。
 - 当前修正为 `wheel_torque = lqr_output[1]`，`hip_virtual_torque_for_vmc = -lqr_output[0]`。
+- LQR 髋部输出行的 `phi` 和 `phi_rate` 增益已乘 `0.6`，用于降低目标附近腿角闭环激进程度；轮端输出行不做该缩放。
+- `phi_rate_damping_kd` 已加入运行时参数，硬件默认 `-0.2`，只追加到髋部虚拟力矩，不作用于轮端力矩。
 - VMC 已改为按二连杆世界角重算腿长和腿摆杆角，再映射虚拟腿长力/腿摆杆力矩到 hip/knee。
 - ROS bridge 下行力矩极性已再次按单关节 probe 复核，当前左腿 `left_hip`、`left_knee` 命令极性均取反后与实物方向一致。
 
@@ -96,8 +99,8 @@
 - 当前判断：
   - 控制器在 `phi` 增大时对 left_hip 的恢复力矩方向是对的，不像单纯极性错误。
   - 因抖动区间会随 `phi_target` 移动，当前不再优先认为是某个固定机械角度点的问题。
-  - 更像目标附近的局部闭环振荡：左腿速度状态过大/过吵、LQR 阻尼项过激、执行死区/回差或小范围静摩擦释放均需排查。
-  - 下一步优先拆解 left_phi_rate 的来源，并在接近 `phi_target` 的小扰动窗口内对比 left/right 的 `phi_rate`、`cmd_hip` 与实际关节速度。
+  - 更像目标附近的局部闭环振荡：左腿速度状态过大/过吵、执行死区/回差或小范围静摩擦释放均需排查。
+  - LQR 本轮已按保守口径收口，下一步优先拆解 left_phi_rate 的来源，并在接近 `phi_target` 的小扰动窗口内对比 left/right 的 `phi_rate`、`cmd_hip` 与实际关节速度。
 ```
 
 `iter-005` 不关注：
@@ -153,6 +156,7 @@
 - `2026-06-27` 已将 `control_hw.yaml` 切换到 `expected_dt_sec = 0.005`、`accepted_dt_tolerance_sec = 0.002`，用于接受 `200Hz` 硬件状态样本。
 - `2026-07-04` 硬件控制门控曾收口为“腿长 PID + VMC + 髋/膝输出”的单独验证模式，用于完成腿长控制阶段。
 - `2026-07-07` 已完成 LQR + VMC 悬空方向复核：状态顺序保持 `[phi, phi_rate, distance, velocity, pitch, pitch_rate]`；修正 LQR 两路输出语义，第一路取反作为 VMC 腿摆杆虚拟力矩，第二路作为轮端输出。`command_enable=false` 下验证 `phi_c < phi_target` 时 hip 为较大正力矩，`length_c > length_target` 时 knee 为较大负力矩。
+- `2026-07-07` LQR 调参收口：髋部输出行 `phi` / `phi_rate` 增益乘 `0.6`，新增 `phi_rate_damping_kd=-0.2` 只作用髋部虚拟力矩，不进入轮端力矩。
 - `2026-07-07` 当前硬件默认配置已进入 LQR 阶段：VMC、LQR、腿长 PID、轮端输出、髋/膝输出均默认开启；heading、anti-split、roll compensation 仍默认关闭。
 
 ## 7. 当前阻塞或待确认问题
@@ -201,7 +205,7 @@
 ### 7.5 实机调参入口
 
 - 实机闭环初期优先观察 `pitch`、`pitch_rate`、`phi`、`phi_rate`、`base_velocity`、轮端力矩和髋关节力矩。
-- 当前进度口径：腿长控制阶段已完成，LQR + VMC 悬空输出方向已复核，下一步主看 `pitch/pitch_rate/base_velocity`、轮端方向和轻触地稳定性。
+- 当前进度口径：腿长控制阶段已完成，LQR + VMC 悬空输出方向已复核，本轮 LQR 调参已收口；下一步主看 `pitch/pitch_rate/base_velocity`、轮端方向和轻触地稳定性。
 - 轻触地前必须确认当前 launch 仍为 `command_enable=false`，先观察 `/joint_command`；准备实际输出时再显式改为 `command_enable=true` 并使用低限幅。
 - 若出现 pitch 高频震荡，优先检查 IMU 方向、gyro 滤波、`pitch_rate` 增益和执行器斜率限制。
 - 若出现缓慢前后跑偏，优先检查 `target_phi`、`target_pitch`、速度方向和距离积分。
